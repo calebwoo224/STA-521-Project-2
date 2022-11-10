@@ -1,8 +1,32 @@
 ---
 title: "STA 521 Project 2"
-author: "Eli Gnesin & Caleb Woo"
+author: "Eli Gnesin (ejg45) & Caleb Woo"
 date: "2022-12-06"
+number-sections: true
+bibliography: references.bib
 output: pdf_document
 ---
 
+# Data Collection and Exploration
 
+## Summary of the Paper
+
+## Summary of the Data
+
+## Exploratory Data Analysis
+
+# Preparation
+
+## Data Split
+
+## Baseline
+
+## First Order Importance
+
+## Genneric Cross-Validation
+
+# Modeling
+
+# Diagnostics
+
+# References
