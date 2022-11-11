@@ -103,20 +103,20 @@ cor(data[,3:11], data[,3:11]) %>%
 From these correlations, some trends stand out. All three of the "physical features" in the paper (NDAI, SD, CORR), are positively correlated with label, which indicates that *higher* values of all three of these features are associated with a label of +1, meaning cloud cover. In contrast, however, four of the five given radiance angles show negative correlation with the label variable, indicating that *lower* values of radiance are generally associated with cloud cover. We can also compare differences between the features in the two classes by considering the densities of the features separated by label:
 
 ```{r, fig.height=3, fig.width=8}
-colors = c("clouds" = "blue", 
-           "noclouds" = "orange",
-           "other" = "purple")
+colors = c("clouds" = "deepskyblue", 
+           "noclouds" = "chocolate3",
+           "other" = "darkseagreen")
 
 g1 = ggplot() +
   geom_density(aes(x = NDAI, color = "clouds", fill = "clouds"), 
                data = data %>% filter(Label == 1), 
-               alpha = 0.5) +
+               alpha = 0.6) +
     geom_density(aes(x = NDAI, color = "noclouds", fill = "noclouds"), 
                data = data %>% filter(Label == -1), 
-               alpha = 0.5) +
+               alpha = 0.6) +
     geom_density(aes(x = NDAI, color = "other", fill = "other"), 
                data = data %>% filter(Label == 0), 
-               alpha = 0.5) +
+               alpha = 0.6) +
   labs(title = "NDAI",
        x = element_blank(),
        y = element_blank()) +
@@ -128,13 +128,13 @@ g1 = ggplot() +
 g2 = ggplot() +
   geom_density(aes(x = SD, color = "clouds", fill = "clouds"), 
                data = data %>% filter(Label == 1), 
-               alpha = 0.5) +
+               alpha = 0.6) +
     geom_density(aes(x = SD, color = "noclouds", fill = "noclouds"), 
                data = data %>% filter(Label == -1), 
-               alpha = 0.5) +
+               alpha = 0.6) +
     geom_density(aes(x = SD, color = "other", fill = "other"), 
                data = data %>% filter(Label == 0), 
-               alpha = 0.5) +
+               alpha = 0.6) +
   labs(title = "SD",
        x = element_blank(),
        y = element_blank()) +
@@ -146,13 +146,13 @@ g2 = ggplot() +
 g3 = ggplot() +
   geom_density(aes(x = CORR, color = "clouds", fill = "clouds"), 
                data = data %>% filter(Label == 1), 
-               alpha = 0.5) +
+               alpha = 0.6) +
     geom_density(aes(x = CORR, color = "noclouds", fill = "noclouds"), 
                data = data %>% filter(Label == -1), 
-               alpha = 0.5) +
+               alpha = 0.6) +
     geom_density(aes(x = CORR, color = "other", fill = "other"), 
                data = data %>% filter(Label == 0), 
-               alpha = 0.5) +
+               alpha = 0.6) +
   labs(title = "CORR",
        x = element_blank(),
        y = element_blank()) +
@@ -164,13 +164,13 @@ g3 = ggplot() +
 g4 = ggplot() +
   geom_density(aes(x = DF, color = "clouds", fill = "clouds"), 
                data = data %>% filter(Label == 1), 
-               alpha = 0.5) +
+               alpha = 0.6) +
     geom_density(aes(x = DF, color = "noclouds", fill = "noclouds"), 
                data = data %>% filter(Label == -1), 
-               alpha = 0.5) +
+               alpha = 0.6) +
     geom_density(aes(x = DF, color = "other", fill = "other"), 
                data = data %>% filter(Label == 0), 
-               alpha = 0.5) +
+               alpha = 0.6) +
   labs(title = "DF",
        x = element_blank(),
        y = element_blank()) +
@@ -182,13 +182,13 @@ g4 = ggplot() +
 g5 = ggplot() +
   geom_density(aes(x = CF, color = "clouds", fill = "clouds"), 
                data = data %>% filter(Label == 1), 
-               alpha = 0.5) +
+               alpha = 0.6) +
     geom_density(aes(x = CF, color = "noclouds", fill = "noclouds"), 
                data = data %>% filter(Label == -1), 
-               alpha = 0.5) +
+               alpha = 0.6) +
     geom_density(aes(x = CF, color = "other", fill = "other"), 
                data = data %>% filter(Label == 0), 
-               alpha = 0.5) +
+               alpha = 0.6) +
   labs(title = "CF",
        x = element_blank(),
        y = element_blank()) +
@@ -200,13 +200,13 @@ g5 = ggplot() +
 g6 = ggplot() +
   geom_density(aes(x = BF, color = "clouds", fill = "clouds"), 
                data = data %>% filter(Label == 1), 
-               alpha = 0.5) +
+               alpha = 0.6) +
     geom_density(aes(x = BF, color = "noclouds", fill = "noclouds"), 
                data = data %>% filter(Label == -1), 
-               alpha = 0.5) +
+               alpha = 0.6) +
     geom_density(aes(x = BF, color = "other", fill = "other"), 
                data = data %>% filter(Label == 0), 
-               alpha = 0.5) +
+               alpha = 0.6) +
   labs(title = "BF",
        x = element_blank(),
        y = element_blank()) +
@@ -218,13 +218,13 @@ g6 = ggplot() +
 g7 = ggplot() +
   geom_density(aes(x = AF, color = "clouds", fill = "clouds"), 
                data = data %>% filter(Label == 1), 
-               alpha = 0.5) +
+               alpha = 0.6) +
     geom_density(aes(x = AF, color = "noclouds", fill = "noclouds"), 
                data = data %>% filter(Label == -1), 
-               alpha = 0.5) +
+               alpha = 0.6) +
     geom_density(aes(x = AF, color = "other", fill = "other"), 
                data = data %>% filter(Label == 0), 
-               alpha = 0.5) +
+               alpha = 0.6) +
   labs(title = "AF",
        x = element_blank(),
        y = element_blank()) +
@@ -236,13 +236,13 @@ g7 = ggplot() +
 g8 = ggplot() +
   geom_density(aes(x = AN, color = "clouds", fill = "clouds"), 
                data = data %>% filter(Label == 1), 
-               alpha = 0.5) +
+               alpha = 0.6) +
     geom_density(aes(x = AN, color = "noclouds", fill = "noclouds"), 
                data = data %>% filter(Label == -1), 
-               alpha = 0.5) +
+               alpha = 0.6) +
     geom_density(aes(x = AN, color = "other", fill = "other"), 
                data = data %>% filter(Label == 0), 
-               alpha = 0.5) +
+               alpha = 0.6) +
   labs(title = "AN",
        x = element_blank(),
        y = element_blank()) +
