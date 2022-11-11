@@ -9,7 +9,7 @@ output: pdf_document
 
 # Data Collection and Exploration
 
-```{r, echo=FALSE, message=FALSE}
+```{r setup-packages, echo=FALSE, message=FALSE}
 library(tidyverse)
 library(GGally)
 library(ggplot2)
@@ -28,7 +28,7 @@ knitr::opts_chunk$set(fig.align="center", echo=FALSE, eval=TRUE,
                       message=FALSE, warning=FALSE, error=FALSE)
 ```
 
-```{r}
+```{r read-data}
 columns = c("Y", "X", "Label", "NDAI", "SD", "CORR", 
             "DF", "CF", "BF", "AF", "AN")
 
@@ -96,7 +96,7 @@ grid.arrange(map1, map2, map3, nrow=1, widths=c(1, 1, 2))
 
 We now continue with a short exploration of the data itself. First, we look at the pairwise correlations between the features, excluding the coordinates:
 
-```{r}
+```{r correlations}
 
 cor(data[,3:11], data[,3:11]) %>%
   kable(format = "simple", digits =3)
@@ -104,7 +104,7 @@ cor(data[,3:11], data[,3:11]) %>%
 
 From these correlations, some trends stand out. All three of the "physical features" in the paper (NDAI, SD, CORR), are positively correlated with label, which indicates that *higher* values of all three of these features are associated with a label of +1, meaning cloud cover. In contrast, however, four of the five given radiance angles show negative correlation with the label variable, indicating that *lower* values of radiance are generally associated with cloud cover. We can also compare differences between the features in the two classes by considering the densities of the features separated by label:
 
-```{r, fig.height=3, fig.width=8}
+```{r density-plots, fig.height=3, fig.width=8}
 colors = c("clouds" = "deepskyblue", 
            "noclouds" = "chocolate3",
            "other" = "darkseagreen")
@@ -256,18 +256,6 @@ g8 = ggplot() +
 grid.arrange(g1,g2,g3,g4,g5,g6,g7,g8,nrow=2)
 ```
 These density plots reinforce the same ideas seen in the correlations above. In the three "physical features", the "cloud" labeled points have densities higher than the "non-cloud" labeled points, and conversely, for four of the five radiances (all except for DF), the bulk of the density for the "non-cloud" labeled points is above that of the cloud labeled points. Interestingly, the radiance densities for the "cloud" labeled points are generally unimodal, whereas the radiances for the "non-cloud" labeled points are generally bimodal, with the larger mode above the cloud density mode and the smaller mode below. This helps explain the need for the physical features; the radiances are less uniformly separable, and thus have less predictive power than the physical features. 
-
-```{r, eval=FALSE}
-clouds = data %>% filter(Label == 1)
-noclouds = data %>% filter(Label == -1)
-
-for (i in 4:11){
-  y1 = clouds %>% pull(i)
-  y2 = noclouds %>% pull(i)
-  print(t.test(y1, y2, alternative = "two.sided"))
-}
-```
-
 
 
 # Preparation
