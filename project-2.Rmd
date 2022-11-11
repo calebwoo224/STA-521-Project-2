@@ -9,11 +9,61 @@ output: pdf_document
 
 # Data Collection and Exploration
 
+```{r, echo=FALSE, message=FALSE}
+library(tidyverse)
+library(GGally)
+library(ggplot2)
+library(lubridate)
+library(magrittr)
+library(gridExtra)
+library(latex2exp)
+library(stats)
+library(plotly)
+library(rjson)
+library(kableExtra)
+library(knitr)
+
+knitr::opts_chunk$set(fig.align="center", echo=FALSE, eval=TRUE,
+                      message=FALSE, warning=FALSE, error=FALSE)
+```
+
+```{r}
+columns = c("Y", "X", "Label", "NDAI", "SD", "CORR", 
+            "DF", "CF", "BF", "AF", "AN")
+
+image1 = read.table("image_data/imagem1.txt", header=FALSE)
+colnames(image1) = columns
+
+image2 = read.table("image_data/imagem2.txt", header=FALSE)
+colnames(image2) = columns
+
+image3 = read.table("image_data/imagem3.txt", header=FALSE)
+colnames(image3) = columns
+
+data = rbind(image1, image2, image3)
+```
+
 ## Summary of the Paper
+
+In 2008, Yu et al. published "Daytime Arctic Cloud Detection Based on Multi-Angle Satellite Data With Case Studies" [@shi_yu_clothiaux_braverman_2008]. The purpose of the study was to explore the state of daytime Arctic cloud classification, and propose a new "Enhanced Linear Correlation Matching Algorithm" and classification system that is less reliant on manual human classification.
+
+The data used in the study was collected by the Multiangle Imaging SpectroRadiometer (MISR) on NASA's Terra satellite, and for this study, 10 orbits of the satellite path over the Arctic, northern Greenland, and Baffin Bay, collected between April and September 2002, were used. Together, this dataset comprises 57 "data units" of three MISR blocks each (with a block being $\frac{1}{180}$ of a path), totaling 7.11 million pixels of 1.1 kilometer resolution (as well as 275 meter resolution for red radiation measurements). The labels of cloud cover and no-cloud cover (as well as an "ambiguous" label), were provided by industry experts.
+
+The research team then used the data to construct three "physical features," CORR, SD, NDAI. CORR is the average of the linear correlations of two pairs of radiation measurements (Af/An and Bf/An), where higher values suggest a cloud-free image. The second, SD, is the standard deviation of the An radiation measurements, used to help detect "smooth cloud-free surfaces", and NDAI is the average of two radiation measurements over a 1.1 kilometer spacial resolution. Using these features, the research team created two decision rules to label a 1.1 km square pixel as clear, and with setting appropriate thresholds, reached over 91% agreement with the expert labels and 100% coverage in labeling. From this, the team demonstrated that the three physical features were sufficient to accurately classify cloud cover in arctic environments with better spatial coverage and real-time adaptive thresholding to improve the robustness of the model.
 
 ## Summary of the Data
 
 ## Exploratory Data Analysis
+
+We now continue with a short exploration of the data itself. First, we look at the pairwise relationships between the features (not including the coordinates) using pairplots:
+
+```{r}
+cor(data[,3:11], data[,3:11]) %>%
+  kable(format = "simple", digits =3)
+```
+
+From these correlations, some trends stand out. All three of the "physical features" in the paper (NDAI, SD, CORR), are positively correlated with label, which indicates that *higher* values of all three of these features are associated with a label of +1, meaning cloud cover. In contrast, however, four of the five given radiance angles show negative correlation with the label variable, indicating that *lower* values of radiance are generally associated with cloud cover. We can also compare differences between the features in the two classes by considering the difference in means between the data with each label:
+
 
 # Preparation
 
