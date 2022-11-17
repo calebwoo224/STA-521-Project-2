@@ -24,6 +24,9 @@ library(kableExtra)
 library(knitr)
 library(kableExtra)
 library(caret)
+library(tree)
+
+source("CVmaster.R")
 
 knitr::opts_chunk$set(fig.align="center", echo=FALSE, eval=TRUE,
                       message=FALSE, warning=FALSE, error=FALSE)
@@ -261,7 +264,6 @@ grid.arrange(g1,g2,g3,g4,g5,g6,g7,g8,nrow=2)
 ```
 These density plots reinforce the same ideas seen in the correlations above. In the three "physical features", the "cloud" labeled points have densities higher than the "non-cloud" labeled points, and conversely, for four of the five radiances (all except for DF), the bulk of the density for the "non-cloud" labeled points is above that of the cloud labeled points. Interestingly, the radiance densities for the "cloud" labeled points are generally unimodal, whereas the radiances for the "non-cloud" labeled points are generally bimodal, with the larger mode above the cloud density mode and the smaller mode below. This helps explain the need for the physical features; the radiances are less uniformly separable, and thus have less predictive power than the physical features. 
 
-
 # Preparation
 
 ## Data Split
@@ -270,7 +272,28 @@ These density plots reinforce the same ideas seen in the correlations above. In 
 
 ## First Order Importance
 
-## Genneric Cross-Validation
+## Generic Cross-Validation
+
+```{r}
+td = image1 %>%
+  select(-Label) %>%
+  mutate(tl = tl)
+tl = image1 %>%
+  pull(Label)
+source("CVmaster.R")
+CVmaster(td, tl, rpart, method = "class")
+
+m = rpart(tl ~ ., data = td, method = "class")
+
+td2 = image2 %>%
+  select(-Label)
+tl2 = image2 %>%
+  pull(Label)
+
+print(mean(tl2 == predict(m, td2, type = "class")))
+
+```
+
 
 # Modeling
 
