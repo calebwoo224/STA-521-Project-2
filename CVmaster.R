@@ -7,7 +7,7 @@ CVmaster = function(training_data, training_labels, classifier,
   #Building the blocks
   training_data$block = rep(0, nrow(training_data))
   training_labels_block = numeric()
-  ims = distinct(training_data %>% select(image))
+  ims = distinct(training_data %>% select(image)) %>% pull(image)
   snum = 0
   
   for (im in ims){

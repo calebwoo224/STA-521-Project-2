@@ -97,7 +97,7 @@ map3 <- ggplot(data=image3, aes(x=X, y=Y, color=factor(Label))) +
   scale_color_manual(labels = c("Not Cloud", "Unlabeled", "Cloud"),
                      values = c("chocolate3", "darkseagreen", "deepskyblue"),
                      name = "Label")
-grid.arrange(map1, map2, map3, nrow=1, widths=c(1, 1, 2))
+grid.arrange(map1, map2, map3, nrow=1, widths=c(1, 1, 1.65))
 ```
 
 ## Exploratory Data Analysis
@@ -276,9 +276,9 @@ These density plots reinforce the same ideas seen in the correlations above. In 
 ## Generic Cross-Validation
 
 ```{r}
-tl = image1 %>%
+tl = data %>%
   pull(Label)
-td = image1 %>%
+td = data %>%
   select(-Label)
 source("CVmaster.R")
 CVmaster(td, tl, "rpart", method = "class")
