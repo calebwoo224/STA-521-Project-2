@@ -56,21 +56,25 @@ CVmaster = function(training_data, training_labels, classifier,
     print(f)
     X = training_data %>%
       filter(block %in% f) %>%
-      select(-c("X", "Y", "image", "block"))
+      select(!c(X, Y, image, block))
     y = training_labels[training_labels_block %in% f]
     
     trainy = training_labels[!(training_labels_block %in% f)]
     train = training_data %>%
         filter(!(block %in% f)) %>%
-        select(-c("X", "Y", "image", "block")) %>%
+        select(!c(X, Y, image, block)) %>%
         mutate(trainy = trainy)
     
-    model = do.call(what = classifier,
-                    args = c(formula = reformulate(colnames(train)
-                                                   [-length(colnames(train))], 
-                                                   response = "trainy"),
-                             data = train,
-                             ags))
+    formula = as.formula(paste("trainy ~ ", paste(colnames(train)
+                         [-length(colnames(train))], 
+                         collapse = "+ ")))
+    
+    model = do.call(classifier,
+                    append(list(
+                      formula,
+                      data = as_tibble(train)
+                 ), ags)
+                )
     preds = predict(model, X, type = "class")
     err = 1 - mean(preds == y)
     error = c(error, err)
