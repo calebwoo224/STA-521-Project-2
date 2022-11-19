@@ -269,18 +269,87 @@ These density plots reinforce the same ideas seen in the correlations above. In 
 
 ## Data Split
 
+In splitting the dataset into training, validation, and test subsets, it is important to preserve the structure of the data, that is, that the observations are denoted by their X and Y spatial coordinates, and any split of the data would have to preserve this spatial structure. One method for doing so is to carve each image up into some $k$ blocks, and then to randomly permute the block identifiers, the range of numbers from 1 to $3k$, and then take a split from the random block permutations. Such a method does preserve the spatial structure of the data, as each point is in a set with some (or all if not an edge) of the points around it. The random permutation of the blocks also ensures that, while the spatial structure of the points relative to each other is preserved, the structure of the image is not considered in the model, such that the orientation and structure of a individual image is a considered feature of the model.
+
 ## Baseline
+
+We can now split the data using the methods outlined above and run a "classifier" which just sets all points to label $-1$, indicating cloudlessness. For the block splitting method, we split each image into 64 blocks, for a total of 192 blocks, of which 30 are for testing, 30 are for validation, and 132 are for training. This method gives a validation set misclassification rate of $63.0\%$ and a test set misclassification rate of $65.3\%$, which is about in line with the overall rate of $-1$ labels being $35-36\%$. This classifier would yield high accuracy if the image data was unbalanced to be mostly cloudless images, but in a scenario where the majority of points are not labeled $-1$, it is not a particularly accurate classifier.
+
+```{r}
+set.seed(521)
+
+tl = data %>%
+  pull(Label)
+td = data %>%
+  select(-Label)
+
+
+td$block = rep(0, nrow(td))
+labels_block = numeric()
+ims = distinct(td %>% select(image)) %>% pull(image)
+snum = 0
+  
+for (im in ims){
+  xvals = td %>%
+    filter(image == im) %>%
+    pull(X) %>%
+    unique()
+  yvals = td %>%
+    filter(image == im) %>%
+    pull(Y) %>%
+    unique()
+  
+  xsplit = split(xvals,
+                 cut(seq_along(xvals),
+                     8,
+                     labels = FALSE))
+  
+  ysplit = split(yvals,
+                 cut(seq_along(yvals),
+                     8,
+                     labels = FALSE))
+
+  for (xs in xsplit){
+    for (ys in ysplit){
+      snum = snum + 1
+      td = td %>%
+        mutate(block = ifelse(
+          ((image == im) & (X %in% xs) & (Y %in% ys)), 
+          snum, block))
+      labels_block = c(labels_block, 
+                            rep(snum, 
+                                nrow(td %>%
+                                       filter((image == im) & 
+                                                (X %in% xs) & 
+                                                (Y %in% ys)))))
+    }
+  }
+}
+
+#Splitting the blocks
+bks = sample(seq.int(from = 1, to = snum, by = 1))
+
+train = tl[labels_block %in% bks[1:132]]
+valid = tl[labels_block %in% bks[133:162]]
+testy = tl[labels_block %in% bks[163:192]]
+
+invisible(mean(valid != -1))
+invisible(mean(testy != -1))
+
+```
+
 
 ## First Order Importance
 
 ## Generic Cross-Validation
+
+We then wrote a function that allows us to pass in the name of a trivial classifier (or a function call to such a classifier), and a number of folds, and outputs the $k$-fold Cross-validation misclassification rate on the training data provided using the classifier. The function uses the block splitting method described in Section 2(a), with $k^2$ blocks per image. It then partitions the blocks into $k$ groups, and, for each partitions, treats that partition as a test set while training the classifier on the other $k-1$ partitions. Finally, the function returns the mean of the misclassification rates of the classifiers predicting on each of the $k$ test partitions. The function also allows for optional arguments, which are then passed to the generic classifier, so as to allow for classifiers to be modified from their generic versions.
 
 ```{r}
 tl = data %>%
   pull(Label)
 td = data %>%
   select(-Label)
-source("CVmaster.R")
 CVmaster(td, tl, "rpart", method = "class")
 ```
 
