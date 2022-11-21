@@ -285,7 +285,8 @@ val_map <- ggplot(data=split_ims$val, aes(x=X, y=Y, color=factor(Label))) +
   labs(title = "Validation Set") +
   scale_color_manual(labels = c("Not Cloud", "Unlabeled", "Cloud"),
                      values = c("chocolate3", "darkseagreen", "deepskyblue"),
-                     name = "Label")
+                     name = "Label") +
+  theme(legend.position = "none")
 test_map <- ggplot(data=split_ims$test, aes(x=X, y=Y, color=factor(Label))) +
   geom_point() +
   coord_quickmap(expand = F, clip = "on") +
@@ -378,6 +379,43 @@ test_trivial <- rep(-1, length(test_labels))
 ```
 
 ## First Order Importance
+
+```{r corrplot}
+corrplot::corrplot(cor(data[,4:12]), type="upper", tl.col="black")
+```
+
+In general, the best set of features should include features that are strongly correlated with the response, in this case label, and features that are weakly correlated with each other. Looking at the correlation plot above, NDAI and CORR are fairly strongly correlated with label and are fairly weakly correlated with each other. Although SD is weakly correlated with CORR which would make it a good feature to include with CORR, it may not be preferable because it is strongly correlated with NDAI and weakly correlated with label. Looking at the scatter plots of the 3 combinations of these 3 variables below, we see that the -1 and 1 labels corresponding to the non-cloud and cloud labels are more easily separated with NDAI and CORR or with log(SD) and CORR. Therefore, we believe that NDAI and CORR are the best 2 features to select out of the 3 constructed physical features because they are both strongly correlated with the response label, are fairly weakly correlated with each other, and lead to more separable groups of labels.
+
+```{r scatter-compare}
+scatter1 <- ggplot(data, aes(x=NDAI, y=log(SD), color=factor(Label))) +
+  geom_point(alpha=0.5) +
+  theme(legend.position = "none")
+scatter2 <- ggplot(data, aes(x=NDAI, y=CORR, color=factor(Label))) +
+  geom_point(alpha=0.5) +
+  theme(legend.position = "none")
+scatter3 <- ggplot(data, aes(x=log(SD), y=CORR, color=factor(Label))) +
+  geom_point(alpha=0.5)
+
+grid.arrange(scatter1, scatter2, scatter3,
+             nrow=1, ncol=3, widths=c(1, 1, 1.5))
+```
+
+Now looking at the radiance angles, the most promising features include BF, AF, and AN because they are all fairly highly correlated with label. Although the correlation of BF with label is slightly weaker, it has a weaker correlation with CORR which may make it a better feature to combine with NDAI and CORR.
+
+Below is a table of the mutual information between each feature and the response label. The entropy of the empirical probability distributions are computed to quantify the amount of information obtained about label when observing one of the features. NDAI is certainly a good feature to select because it has the highest mutual information with label by a large margin. Although SD has a higher mutual information than CORR, since it is highly correlated with NDAI and CORR still has a high mutual information, we prefer to choose CORR alongside NDAI. As expected, the BF, AF, and AN radiance angles have a higher mutual information with label than the DF and CF radiance angles. Since the AF and AN radiance angles only have a slightly higher mutual information than the BF radiance angle, we prefer to choose the BF radiance angle because it has a weaker correlation with CORR compared to the AF and AN radiance angles. Therefore, we have chosen the 3 best features to be NDAI, CORR, and the BF radiance angle because they are all fairly strongly correlated with the response label, they are only moderately correlated with each other, and they all have a relatively high mutual information with the response label.
+
+```{r mutual-information}
+library(infotheo)
+mutual_info <- function(feature) {
+  mutinformation(data$Label, discretize(feature))
+}
+
+mi_table <- apply(data[, 5:ncol(data)], MARGIN=2, FUN=mutual_info)
+mi_table %>%
+  kable(digits=3, col.names=c("Entropy"),
+        caption="Mutual Information with Label") %>%
+  kable_styling(latex_options="HOLD_position", full_width=F)
+```
 
 ## Generic Cross-Validation
 
