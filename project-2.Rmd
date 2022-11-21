@@ -402,7 +402,9 @@ grid.arrange(scatter1, scatter2, scatter3,
 
 Now looking at the radiance angles, the most promising features include BF, AF, and AN because they are all fairly highly correlated with label. Although the correlation of BF with label is slightly weaker, it has a weaker correlation with CORR which may make it a better feature to combine with NDAI and CORR.
 
-Below is a table of the mutual information between each feature and the response label. The entropy of the empirical probability distributions are computed to quantify the amount of information obtained about label when observing one of the features. NDAI is certainly a good feature to select because it has the highest mutual information with label by a large margin. Although SD has a higher mutual information than CORR, since it is highly correlated with NDAI and CORR still has a high mutual information, we prefer to choose CORR alongside NDAI. As expected, the BF, AF, and AN radiance angles have a higher mutual information with label than the DF and CF radiance angles. Since the AF and AN radiance angles only have a slightly higher mutual information than the BF radiance angle, we prefer to choose the BF radiance angle because it has a weaker correlation with CORR compared to the AF and AN radiance angles. Therefore, we have chosen the 3 best features to be NDAI, CORR, and the BF radiance angle because they are all fairly strongly correlated with the response label, they are only moderately correlated with each other, and they all have a relatively high mutual information with the response label.
+Below is a table of the mutual information between each feature and the response label. The entropy of the empirical probability distributions are computed to quantify the amount of information obtained about label when observing one of the features. NDAI is certainly a good feature to select because it has the highest mutual information with label by a large margin. Although SD has a higher mutual information than CORR, since it is highly correlated with NDAI and CORR still has a high mutual information, we prefer to choose CORR alongside NDAI. As expected, the BF, AF, and AN radiance angles have a higher mutual information with label than the DF and CF radiance angles. Since the AF and AN radiance angles only have a slightly higher mutual information than the BF radiance angle, we may prefer to choose the BF radiance angle because it has a weaker correlation with CORR compared to the AF and AN radiance angles. The next table shows the table of the mutual information between the combination of NDAI and CORR with BF, AF, and AN respectively to see which combination of the 3 variables results in the greatest mutual information. The combinations with BF and AN both result in the highest mutual information. This further justifies combining the BF radiance angle with NDAI and CORR because not only is it most weakly correlated with CORR, but it also gives the highest mutual information when in combination with NDAI and CORR.
+
+Therefore, we have chosen the 3 best features to be NDAI, CORR, and the BF radiance angle because they are all fairly strongly correlated with the response label, they are only moderately correlated with each other, and they all have a relatively high mutual information with the response label.
 
 ```{r mutual-information}
 library(infotheo)
@@ -412,6 +414,20 @@ mutual_info <- function(feature) {
 
 mi_table <- apply(data[, 5:ncol(data)], MARGIN=2, FUN=mutual_info)
 mi_table %>%
+  kable(digits=3, col.names=c("Entropy"),
+        caption="Mutual Information with Label") %>%
+  kable_styling(latex_options="HOLD_position", full_width=F)
+```
+
+```{r mutual-information-2}
+mi_bf <- mutinformation(data$Label, discretize(data[, c("NDAI", "CORR", "BF")]))
+mi_af <- mutinformation(data$Label, discretize(data[, c("NDAI", "CORR", "AF")]))
+mi_an <- mutinformation(data$Label, discretize(data[, c("NDAI", "CORR", "BF")]))
+
+mi_table2 <- data.frame(c(mi_bf, mi_af, mi_an))
+names(mi_table2) <- "Entropy"
+rownames(mi_table2) <- c("NDAI, CORR, BF", "NDAI, CORR, AF", "NDAI, CORR, AN")
+mi_table2 %>%
   kable(digits=3, col.names=c("Entropy"),
         caption="Mutual Information with Label") %>%
   kable_styling(latex_options="HOLD_position", full_width=F)
