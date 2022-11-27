@@ -1,8 +1,8 @@
-block_split = function(training_data, training_labels) {
+block_split = function(training_data, training_labels, K) {
   
   training_data$block = rep(0, nrow(training_data))
   training_labels_block = numeric()
-  ims = distinct(training_data %>% select(image)) %>% pull(image)
+  ims = distinct(training_data %>% dplyr::select(image)) %>% pull(image)
   snum = 0
   
   for (im in ims){

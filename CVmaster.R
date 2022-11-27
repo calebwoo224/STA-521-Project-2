@@ -6,7 +6,7 @@ CVmaster = function(training_data, training_labels, classifier,
   ags = list(...)
   
   if (split == "block"){
-    output = block_split(training_data, training_labels)
+    output = block_split(training_data, training_labels, K)
     training_data = output$training_data
     labels = output$labels
     snum = output$snum
@@ -25,13 +25,13 @@ CVmaster = function(training_data, training_labels, classifier,
     print(f)
     X = training_data %>%
       filter(block %in% f) %>%
-      select(!c(X, Y, image, block))
+      dplyr::select(!c(X, Y, image, block))
     y = training_labels[labels %in% f]
     
     trainy = training_labels[!(labels %in% f)]
     train = training_data %>%
         filter(!(block %in% f)) %>%
-        select(!c(X, Y, image, block)) %>%
+        dplyr::select(!c(X, Y, image, block)) %>%
         mutate(trainy = trainy)
     
     formula = as.formula(paste("trainy ~ ", paste(colnames(train)
@@ -44,7 +44,10 @@ CVmaster = function(training_data, training_labels, classifier,
                       data = as_tibble(train)
                  ), ags)
                 )
-    preds = predict(model, X, type = "class")
+    preds = predict(model, X, type="class")
+    if (is.list(preds)) {
+      preds = preds$class
+    }
     err = 1 - mean(preds == y)
     error = c(error, err)
   }
