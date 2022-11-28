@@ -30,6 +30,10 @@ library(tidymodels)
 library(MASS)
 library(tidyr)
 library(e1071)
+library(randomForest)
+library(naivebayes)
+library(RSNNS)
+library(adabag)
 
 source("CVmaster.R")
 source("image_split.R")
@@ -438,11 +442,16 @@ mi_table2 %>%
 We then wrote a function that allows us to pass in the name of a trivial classifier (or a function call to such a classifier), and a number of folds, and outputs the $k$-fold Cross-validation misclassification rate on the training data provided using the classifier. The function uses the block splitting method described in Section 2(a), with $k^2$ blocks per image. It then partitions the blocks into $k$ groups, and, for each partitions, treats that partition as a test set while training the classifier on the other $k-1$ partitions. Finally, the function returns the mean of the misclassification rates of the classifiers predicting on each of the $k$ test partitions. The function also allows for optional arguments, which are then passed to the generic classifier, so as to allow for classifiers to be modified from their generic versions.
 
 ```{r}
+#Eli's Test Code
+
+source("CVmaster.R")
+
 tl = image1 %>%
   pull(Label)
 td = image1 %>%
   dplyr::select(!c(Label))
-CVmaster(td, tl, "lda", split = "block")
+
+CVmaster(td, tl, "boosting", K = 8, split = "block", type = "class")
 ```
 
 # Modeling
