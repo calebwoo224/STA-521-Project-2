@@ -456,12 +456,11 @@ td = image1 %>%
 CVmaster(td, tl, "boosting", K = 8, split = "block", type = "class")
 ```
 
-```{r}
-# Caleb's Test Code
-
+```{r different-splitting-CV}
 source("CVmaster.R")
 source("image_split.R")
 
+CVmaster(data[,-4], data[,4], "lda", K = 8, split = "block", type = "class")
 CVmaster(data[,-4], data[,4], "lda", K = 8, split = "image", type = "class")
 ```
 

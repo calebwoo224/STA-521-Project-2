@@ -16,6 +16,7 @@ CVmaster = function(training_data, training_labels, classifier,
     output = image_split(training_data, training_labels, K)
     training_data = output$training_data
     labels = output$labels
+    training_labels = output$train_labels
     snum = output$snum
   } else {
     stop("Improper split method provided")
@@ -35,16 +36,8 @@ CVmaster = function(training_data, training_labels, classifier,
       filter(block %in% f) %>%
       dplyr::select(!c(X, Y, image, block))
     y = training_labels[labels %in% f]
-    # debug print
-    print(length(y))
-    print(nrow(X))
     
     trainy = training_labels[!(labels %in% f)]
-    # debug print
-    print(length(trainy))
-    print(training_data %>%
-            filter(!(block %in% f)) %>%
-            nrow())
     train = training_data %>%
         filter(!(block %in% f)) %>%
         dplyr::select(!c(X, Y, image, block)) %>%

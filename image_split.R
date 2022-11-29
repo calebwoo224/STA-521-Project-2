@@ -1,9 +1,14 @@
 image_split <- function(data, labels, K) {
   
   data$block = rep(0, nrow(data))
-  training_labels_block = numeric()
   ims = distinct(data %>% dplyr::select(image)) %>% pull(image)
   snum = 0
+  train_blocks <- floor(K/2.5)
+  if (K-2*train_blocks >= train_blocks) {
+    train_blocks <- train_blocks + 1
+  }
+  val_blocks <- K-2*train_blocks
+  
   for (im in ims) {
     if (im == 2) {
       data$label <- labels
@@ -25,6 +30,16 @@ image_split <- function(data, labels, K) {
         filter(image == im) %>%
         pull(Y) %>%
         unique()
+      if (val_blocks > 1) {
+        xsplit = split(xvals,
+                       cut(xvals,
+                           val_blocks,
+                           labels = FALSE))
+      }
+      else {
+        xsplit = xvals
+        ysplit = yvals
+      }
     }
     else {
       xvals = data %>%
@@ -35,36 +50,40 @@ image_split <- function(data, labels, K) {
         filter(image == im) %>%
         pull(Y) %>%
         unique()
+      xsplit = split(xvals,
+                     cut(xvals,
+                         train_blocks,
+                         labels = FALSE))
     }
     
-    xsplit = split(xvals,
-                   cut(seq_along(xvals),
-                       K,
-                       labels = FALSE))
-    
-    ysplit = split(yvals,
-                   cut(seq_along(yvals),
-                       K,
-                       labels = FALSE))
-    
-    for (xs in xsplit){
-      for (ys in ysplit){
-        snum = snum + 1
-        data = data %>%
-          mutate(block = ifelse(
-            ((image == im) & (X %in% xs) & (Y %in% ys)), 
-            snum, block))
-        training_labels_block = c(training_labels_block, 
-                                  rep(snum, 
-                                      nrow(data %>%
-                                             filter((image == im) & 
-                                                      (X %in% xs) & 
-                                                      (Y %in% ys)))))
+    if (typeof(xsplit) == "list") {
+      for (i in 1:length(xsplit)) {
+          xs = xsplit[[i]]
+          snum = snum + 1
+          data = data %>%
+            mutate(block = ifelse(
+              ((image == im) & (X %in% xs) & (Y %in% yvals)), 
+              snum, block))
       }
     }
+    else {
+      snum = snum + 1
+      data = data %>%
+        mutate(block = ifelse(
+          ((image == im) & (X %in% xsplit) & (Y %in% ysplit)), 
+          snum, block))
+    }
   }
-  return(list("training_data" = data %>% filter(block != 0), 
-              "labels" = training_labels_block,
+  
+  return(list("training_data" = data %>%
+                filter(block != 0) %>%
+                dplyr::select(-label), 
+              "labels" = data %>%
+                filter(block != 0) %>%
+                pull(block),
+              "train_labels"= data %>%
+                filter(block != 0) %>%
+                pull(label),
               "val_data" = val,
               "val_labels" = val_labels,
               "test_data" = test,
