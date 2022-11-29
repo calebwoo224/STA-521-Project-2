@@ -513,7 +513,7 @@ ggplot(data = roc_data, aes(x = X1, y = X2, color = factor(X3))) +
   scale_color_manual(labels = model_labels,
                      values = c("red", "blue")) +
   labs(title = "ROC Model Comparison",
-       x = "Specificity", y = "Sensitivity",
+       x = "1 - Specificity", y = "Sensitivity",
        color = "ROC curves")
 ```
 
