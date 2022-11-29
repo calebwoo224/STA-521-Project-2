@@ -281,12 +281,13 @@ These density plots reinforce the same ideas seen in the correlations above. In 
 
 In splitting the dataset into training, validation, and test subsets, it is important to preserve the structure of the data, that is, that the observations are denoted by their X and Y spatial coordinates, and any split of the data would have to preserve this spatial structure. One method for doing so is to carve each image up into some $k$ blocks, and then to randomly permute the block identifiers, the range of numbers from 1 to $3k$, and then take a split from the random block permutations. Such a method does preserve the spatial structure of the data, as each point is in a set with some (or all if not an edge) of the points around it. The random permutation of the blocks also ensures that, while the spatial structure of the points relative to each other is preserved, the structure of the image is not considered in the model, such that the orientation and structure of a individual image is a considered feature of the model.
 
-A second method for splitting the data into three sets is to assign all data from images 1 and 3 to the training data. Then we can split the image 2 data in half to assign each half to the validation and test sets respectively. By doing so, we retain the majority of the data for training to better fit our classifiers. In addition, by splitting image 2 in half, we still retain the spatial structure of the data for the validation and test sets. We believe that image 2 is the best choice to split in half for our validation and test sets because each half contains numerous samples from each class. Looking at the maps of the validation and test sets below, we see that each set contains a sizable number of cloud, unlabeled, and non-cloud samples so that we are validating and testing our classifiers on a similar number of samples per class.
+A second method for splitting the data into three sets is to assign all data from images 1 and 3 to the training data. Then we can split the image 2 data in half to assign each half to the validation and test sets respectively. By doing so, we retain the majority of the data for training to better fit our classifiers. In addition, by splitting image 2 in half, we still retain the spatial structure of the data for the validation and test sets. We believe that image 2 is the best choice to split in half for our validation and test sets because each half contains numerous samples from each class. Looking at the maps of the validation and test sets below, we see that each set contains a sizable number of cloud, unlabeled, and non-cloud samples so that we are validating and testing our classifiers on a similar number of samples per class. Since we would like to incorporate this image split method with the cross validation function, we will incorporate the validation data which is half of image 2 into the training data and use the validation data along with the training data from images 1 and 3 to train and validate on K folds of data before checking how the trained model will perform on the separate test data from image 2.
 
 ```{r val-test-maps}
-split_ims <- image_split(data)
+split_ims <- image_split(data[,-4], data[,4], 5)
 
-val_map <- ggplot(data=split_ims$val, aes(x=X, y=Y, color=factor(Label))) +
+val_map <- ggplot(data=split_ims$val_data, aes(x=X, y=Y,
+                                               color=factor(split_ims$val_labels))) +
   geom_point() +
   coord_quickmap(expand = F, clip = "on") +
   labs(title = "Validation Set") +
@@ -294,7 +295,8 @@ val_map <- ggplot(data=split_ims$val, aes(x=X, y=Y, color=factor(Label))) +
                      values = c("chocolate3", "darkseagreen", "deepskyblue"),
                      name = "Label") +
   theme(legend.position = "none")
-test_map <- ggplot(data=split_ims$test, aes(x=X, y=Y, color=factor(Label))) +
+test_map <- ggplot(data=split_ims$test_data, aes(x=X, y=Y,
+                                            color=factor(split_ims$test_labels))) +
   geom_point() +
   coord_quickmap(expand = F, clip = "on") +
   labs(title = "Test Set") +
@@ -314,12 +316,12 @@ set.seed(521)
 tl = data %>%
   pull(Label)
 td = data %>%
-  select(-Label)
+  dplyr::select(-Label)
 
 
 td$block = rep(0, nrow(td))
 labels_block = numeric()
-ims = distinct(td %>% select(image)) %>% pull(image)
+ims = distinct(td %>% dplyr::select(image)) %>% pull(image)
 snum = 0
   
 for (im in ims){
@@ -449,9 +451,18 @@ source("CVmaster.R")
 tl = image1 %>%
   pull(Label)
 td = image1 %>%
-  dplyr::select(!c(Label))
+  dplyr::select(-Label)
 
 CVmaster(td, tl, "boosting", K = 8, split = "block", type = "class")
+```
+
+```{r}
+# Caleb's Test Code
+
+source("CVmaster.R")
+source("image_split.R")
+
+CVmaster(data[,-4], data[,4], "lda", K = 8, split = "image", type = "class")
 ```
 
 # Modeling
