@@ -33,6 +33,7 @@ library(randomForest)
 library(naivebayes)
 library(RSNNS)
 library(adabag)
+library(pROC)
 
 source("CVmaster.R")
 source("image_split.R")
@@ -465,16 +466,55 @@ CVmaster(data[,-4], data[,4], "lda", K = 8, split = "image", type = "class")
 
 ```{r logistic-regression}
 source("CVmaster.R")
-td <- data %>%
+X_cv <- data %>%
   filter(Label != 0) %>%
   mutate(Label = ifelse(
     Label == -1,
     0, Label
   ))
-tl <- td %>% pull(Label)
+y_cv <- td %>% pull(Label)
 
-CVmaster(td[,-4], tl, "glm", K = 8, split = "image", type = "response",
+CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
+         K = 8, split = "image", type = "response",
          thresh=0.5, family="binomial")
+```
+
+```{r logistic-regression-ROC, message=FALSE}
+im_split <- image_split(data[, -4], data[, 4], 5)
+train_data <- cbind(im_split$training_data[, -c(1:3, 12)], im_split$train_labels)
+colnames(train_data)[ncol(train_data)] <- "Label"
+
+train_data <- train_data %>%
+  filter(Label != 0) %>%
+  mutate(Label = ifelse(
+    Label == -1,
+    0, Label
+  ))
+
+logi1 <- glm(Label ~ ., family = "binomial", data = train_data)
+preds1 <- predict(logi1, train_data[, -ncol(train_data)], type = "response")
+roc1 <- roc(train_data$Label, preds1)
+auc1 <- rep(roc1$auc, length(roc1$specificities))
+
+logi2 <- glm(Label ~ NDAI + CORR + BF, family = "binomial", data = train_data)
+preds2 <- predict(logi2, train_data[, -c(2, 4:5, 7:9)], type = "response")
+roc2 <- roc(train_data$Label, preds2)
+auc2 <- rep(roc2$auc, length(roc2$specificities))
+
+roc_data <- data.frame(cbind(c(roc1$specificities, roc2$specificities),
+                             c(roc1$sensitivities, roc2$sensitivities),
+                             c(auc1, auc2)))
+model_labels <- c(paste0("LR all variables AUC = ", round(roc1$auc, 3)),
+                  paste0("LR 3 AUC = ", round(roc2$auc, 3)))
+
+ggplot(data = roc_data, aes(x = X1, y = X2, color = factor(X3))) +
+  geom_line() +
+  scale_x_reverse() +
+  scale_color_manual(labels = model_labels,
+                     values = c("red", "blue")) +
+  labs(title = "ROC Model Comparison",
+       x = "Specificity", y = "Sensitivity",
+       color = "ROC curves")
 ```
 
 # Modeling
