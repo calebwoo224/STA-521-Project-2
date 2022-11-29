@@ -4,6 +4,7 @@ CVmaster = function(training_data, training_labels, classifier,
                     K = 5, loss = "misclassification", 
                     split = c("image", "block"), 
                     type = c("class", "prob", "response"),
+                    thresh = 0.5,
                     formula = TRUE, ...) {
   ags = list(...)
   
@@ -70,6 +71,11 @@ CVmaster = function(training_data, training_labels, classifier,
     }
     if(type == "prob") {
       preds = apply(preds, MARGIN = 1, FUN = which.max) - 2
+    }
+    # logistic regression
+    if (type == "response") {
+      preds1 <- preds > thresh
+      preds <- ifelse(preds1 > thresh, 1, 0)
     }
     err = 1 - mean(preds == y)
     error = c(error, err)
