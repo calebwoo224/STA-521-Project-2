@@ -22,7 +22,6 @@ library(plotly)
 library(rjson)
 library(kableExtra)
 library(knitr)
-library(kableExtra)
 library(caret)
 library(tree)
 library(rpart)
@@ -462,6 +461,20 @@ source("image_split.R")
 
 CVmaster(data[,-4], data[,4], "lda", K = 8, split = "block", type = "class")
 CVmaster(data[,-4], data[,4], "lda", K = 8, split = "image", type = "class")
+```
+
+```{r logistic-regression}
+source("CVmaster.R")
+td <- data %>%
+  filter(Label != 0) %>%
+  mutate(Label = ifelse(
+    Label == -1,
+    0, Label
+  ))
+tl <- td %>% pull(Label)
+
+CVmaster(td[,-4], tl, "glm", K = 8, split = "image", type = "response",
+         family="binomial")
 ```
 
 # Modeling
