@@ -474,7 +474,7 @@ td <- data %>%
 tl <- td %>% pull(Label)
 
 CVmaster(td[,-4], tl, "glm", K = 8, split = "image", type = "response",
-         family="binomial")
+         thresh=0.5, family="binomial")
 ```
 
 # Modeling

@@ -31,8 +31,8 @@ image_split <- function(data, labels, K) {
         pull(Y) %>%
         unique()
       if (val_blocks > 1) {
-        xsplit = split(xvals,
-                       cut(xvals,
+        ysplit = split(yvals,
+                       cut(yvals,
                            val_blocks,
                            labels = FALSE))
       }
@@ -50,19 +50,19 @@ image_split <- function(data, labels, K) {
         filter(image == im) %>%
         pull(Y) %>%
         unique()
-      xsplit = split(xvals,
-                     cut(xvals,
+      ysplit = split(yvals,
+                     cut(yvals,
                          train_blocks,
                          labels = FALSE))
     }
     
-    if (typeof(xsplit) == "list") {
-      for (i in 1:length(xsplit)) {
-          xs = xsplit[[i]]
+    if (typeof(ysplit) == "list") {
+      for (i in 1:length(ysplit)) {
+          ys = ysplit[[i]]
           snum = snum + 1
           data = data %>%
             mutate(block = ifelse(
-              ((image == im) & (X %in% xs) & (Y %in% yvals)), 
+              ((image == im) & (X %in% xvals) & (Y %in% ys)), 
               snum, block))
       }
     }

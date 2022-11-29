@@ -45,12 +45,12 @@ CVmaster = function(training_data, training_labels, classifier,
         mutate(trainy = trainy)
     
     if (formula == TRUE) {
-    formula = as.formula(paste("trainy ~ ", paste(colnames(train)
+    formula_written = as.formula(paste("trainy ~ ", paste(colnames(train)
                          [-length(colnames(train))], 
                          collapse = "+ ")))
     model = do.call(classifier,
                     append(list(
-                      formula,
+                      formula_written,
                       data = as_tibble(train)
                  ), ags)
                 )
