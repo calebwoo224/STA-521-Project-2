@@ -472,14 +472,14 @@ X_cv <- data %>%
     Label == -1,
     0, Label
   ))
-y_cv <- td %>% pull(Label)
+y_cv <- X_cv %>% pull(Label)
 
 CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
          K = 8, split = "image", type = "response",
          thresh=0.5, family="binomial")
 ```
 
-```{r logistic-regression-ROC, message=FALSE}
+```{r ROC-computations, message=FALSE}
 im_split <- image_split(data[, -4], data[, 4], 5)
 train_data <- cbind(im_split$training_data[, -c(1:3, 12)], im_split$train_labels)
 colnames(train_data)[ncol(train_data)] <- "Label"
@@ -500,7 +500,9 @@ logi2 <- glm(Label ~ NDAI + CORR + BF, family = "binomial", data = train_data)
 preds2 <- predict(logi2, train_data[, -c(2, 4:5, 7:9)], type = "response")
 roc2 <- roc(train_data$Label, preds2)
 auc2 <- rep(roc2$auc, length(roc2$specificities))
+```
 
+```{r ROC-comparison}
 roc_data <- data.frame(cbind(c(roc1$specificities, roc2$specificities),
                              c(roc1$sensitivities, roc2$sensitivities),
                              c(auc1, auc2)))
