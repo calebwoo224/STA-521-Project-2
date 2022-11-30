@@ -4,8 +4,7 @@ CVmaster = function(training_data, training_labels, classifier,
                     K = 5, loss = "misclassification", 
                     split = c("image", "block", "done"), 
                     type = c("class", "prob", "response"),
-                    thresh = 0.5,
-                    formula = TRUE, 
+                    thresh = 0.5, formula = TRUE, 
                     test_data = NULL, test_labels = NULL, ...) {
   ags = list(...)
   
@@ -113,15 +112,27 @@ CVmaster = function(training_data, training_labels, classifier,
   train = training_data %>%
     dplyr::select(!c(X, Y, image, block)) %>%
     mutate(trainy = training_labels)
-  formula_written = as.formula(paste("trainy ~ ", paste(colnames(train)
-                                                        [-length(colnames(train))], 
-                                                        collapse = "+ ")))
-  model = do.call(classifier,
-                  append(list(
-                    formula_written,
-                    data = as_tibble(train)
-                  ), ags)
-  )
+  if (formula == TRUE) {
+    formula_written = as.formula(paste("trainy ~ ", paste(colnames(train)
+                                                          [-length(colnames(train))], 
+                                                          collapse = "+ ")))
+    model = do.call(classifier,
+                    append(list(
+                      formula_written,
+                      data = as_tibble(train)
+                    ), ags)
+    )
+  } else {
+    Xv = train %>%
+      dplyr::select(!trainy) %>%
+      as.matrix()
+    model = do.call(classifier,
+                    append(list(
+                      Xv,
+                      trainy
+                    ), ags)
+    )
+  }
   # test loss
   if (!is.null(test_data) & !is.null(test_labels)) {
     cols = colnames(train)[-length(colnames(train))]
