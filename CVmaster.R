@@ -2,13 +2,32 @@ library(tidyverse)
 
 CVmaster = function(training_data, training_labels, classifier, 
                     K = 5, loss = "misclassification", 
-                    split = c("image", "block"), 
+                    split = c("image", "block", "done"), 
                     type = c("class", "prob", "response"),
                     thresh = 0.5,
                     formula = TRUE, ...) {
   ags = list(...)
   
-  if (split == "block"){
+  if (split == "done") {
+    snum = 0
+    training_data$block2 = rep(0, nrow(training_data))
+    training_data = training_data %>%
+      mutate(tl = training_labels) %>%
+      arrange(block)
+    bk = training_data %>% pull(block) %>% unique()
+    for (i in 1:length(bk)) {
+      snum = snum + 1
+      training_data = training_data %>%
+        mutate(block2 = ifelse(block == bk[i], snum, block2))
+    }
+    training_labels = training_data %>%
+      pull(tl)
+    training_data = training_data %>%
+      mutate(block = block2) %>%
+      dplyr::select(!c(tl, block2))
+    labels = training_data %>%
+      pull(block)
+  } else if (split == "block"){
     output = block_split(training_data, training_labels, K)
     training_data = output$training_data
     labels = output$labels

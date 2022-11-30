@@ -310,7 +310,7 @@ grid.arrange(val_map, test_map, nrow=1)
 
 We can now split the data using the methods outlined above and run a "classifier" which just sets all points to label $-1$, indicating cloudlessness. For the block splitting method, we split each image into 64 blocks, for a total of 192 blocks, of which 30 are for testing, 30 are for validation, and 132 are for training. This method gives a validation set misclassification rate of $63.0\%$ and a test set misclassification rate of $65.3\%$, which is about in line with the overall rate of $-1$ labels being $35-36\%$. This classifier would yield high accuracy if the image data was unbalanced to be mostly cloudless images, but in a scenario where the majority of points are not labeled $-1$, it is not a particularly accurate classifier.
 
-```{r}
+```{r block-split-baseline}
 set.seed(521)
 
 tl = data %>%
@@ -364,12 +364,16 @@ for (im in ims){
 #Splitting the blocks
 bks = sample(seq.int(from = 1, to = snum, by = 1))
 
-train = tl[labels_block %in% bks[1:132]]
-valid = tl[labels_block %in% bks[133:162]]
-testy = tl[labels_block %in% bks[163:192]]
+block_train_labels = tl[labels_block %in% bks[1:132]]
+block_valid_labels = tl[labels_block %in% bks[133:162]]
+block_test_labels = tl[labels_block %in% bks[163:192]]
 
-invisible(mean(valid != -1))
-invisible(mean(testy != -1))
+block_train = td %>% filter(block %in% bks[1:132])
+block_valid = td %>% filter(block %in% bks[133:162])
+block_test = td %>% filter(block %in% bks[163:192])
+
+invisible(mean(block_valid_labels != -1))
+invisible(mean(block_test_labels != -1))
 
 ```
 
@@ -443,17 +447,17 @@ mi_table2 %>%
 
 We then wrote a function that allows us to pass in the name of a trivial classifier (or a function call to such a classifier), and a number of folds, and outputs the $k$-fold Cross-validation misclassification rate on the training data provided using the classifier. The function uses the block splitting method described in Section 2(a), with $k^2$ blocks per image. It then partitions the blocks into $k$ groups, and, for each partitions, treats that partition as a test set while training the classifier on the other $k-1$ partitions. Finally, the function returns the mean of the misclassification rates of the classifiers predicting on each of the $k$ test partitions. The function also allows for optional arguments, which are then passed to the generic classifier, so as to allow for classifiers to be modified from their generic versions.
 
+# Modeling
+
 ```{r}
 #Eli's Test Code
 
-source("CVmaster.R")
+#source("CVmaster.R")
 
-tl = image1 %>%
-  pull(Label)
-td = image1 %>%
-  dplyr::select(-Label)
+tl = c(block_train_labels, block_valid_labels)
+td = rbind(block_train, block_valid)
 
-CVmaster(td, tl, "boosting", K = 8, split = "block", type = "class")
+#CVmaster(td, tl, "qda", K = 8, split = "done", type = "class")
 ```
 
 ```{r different-splitting-CV}
@@ -519,7 +523,18 @@ ggplot(data = roc_data, aes(x = X1, y = X2, color = factor(X3))) +
        color = "ROC curves")
 ```
 
-# Modeling
+```{r lda-block-split}
+btrain = td %>% 
+  mutate(Label = tl) %>%
+  filter(Label != 0)
+blabel <- btrain %>% pull(Label)
+btrain = btrain %>% dplyr::select(!Label)
+
+CVmaster(btrain, blabel, "lda",
+         K = 8, split = "done", type = "class", formula = FALSE)
+
+```
+
 
 # Diagnostics
 
