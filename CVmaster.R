@@ -5,7 +5,8 @@ CVmaster = function(training_data, training_labels, classifier,
                     split = c("image", "block", "done"), 
                     type = c("class", "prob", "response"),
                     thresh = 0.5,
-                    formula = TRUE, ...) {
+                    formula = TRUE, 
+                    test_data = NULL, test_labels = NULL, ...) {
   ags = list(...)
   
   if (split == "done") {
@@ -122,7 +123,7 @@ CVmaster = function(training_data, training_labels, classifier,
                   ), ags)
   )
   # test loss
-  if (!is.null(test_data) & !is.null(test_data)) {
+  if (!is.null(test_data) & !is.null(test_labels)) {
     cols = colnames(train)[-length(colnames(train))]
     test_data = test_data[, cols]
     preds = predict(model, test_data, type=type)
