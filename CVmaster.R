@@ -2,38 +2,40 @@ library(tidyverse)
 
 CVmaster = function(training_data, training_labels, classifier, 
                     K = 5, loss = "misclassification", 
-                    split = c("image", "block", "done"), 
+                    split = c("image", "block"), 
                     type = c("class", "prob", "response"),
-                    thresh = 0.5, formula = TRUE, 
+                    thresh = 0.5, formula = TRUE, seed = 521,
                     test_data = NULL, test_labels = NULL, ...) {
   ags = list(...)
   
-  if (split == "done") {
-    snum = 0
-    training_data$block2 = rep(0, nrow(training_data))
-    training_data = training_data %>%
-      mutate(tl = training_labels) %>%
-      arrange(block)
-    bk = training_data %>% pull(block) %>% unique()
-    for (i in 1:length(bk)) {
-      snum = snum + 1
-      training_data = training_data %>%
-        mutate(block2 = ifelse(block == bk[i], snum, block2))
-    }
-    training_labels = training_data %>%
-      pull(tl)
-    training_data = training_data %>%
-      mutate(block = block2) %>%
-      dplyr::select(!c(tl, block2))
-    labels = training_data %>%
-      pull(block)
-  } else if (split == "block"){
+  set.seed(seed)
+  
+# if (split == "done") {
+#   snum = 0
+#   training_data$block2 = rep(0, nrow(training_data))
+#   training_data = training_data %>%
+#     mutate(tl = training_labels) %>%
+#     arrange(block)
+#   bk = training_data %>% pull(block) %>% unique()
+#   for (i in 1:length(bk)) {
+#     snum = snum + 1
+#     training_data = training_data %>%
+#       mutate(block2 = ifelse(block == bk[i], snum, block2))
+#   }
+#   training_labels = training_data %>%
+#     pull(tl)
+#   training_data = training_data %>%
+#     mutate(block = block2) %>%
+#     dplyr::select(!c(tl, block2))
+#   labels = training_data %>%
+#     pull(block)
+# } else
+  
+  if (split == "block"){
     output = block_split(training_data, training_labels, K)
     training_data = output$training_data
     labels = output$labels
     snum = output$snum
-    test_data = NULL
-    test_labels = NULL
   } else if (split == "image") {
     output = image_split(training_data, training_labels, K)
     training_data = output$training_data
@@ -48,6 +50,18 @@ CVmaster = function(training_data, training_labels, classifier,
   
   #Splitting the blocks
   bks = seq.int(from = 1, to = snum, by = 1)
+  if (split == "block") {
+    bks = sample(bks)
+    tnum = floor(length(bks)/6) #Set ~1/6 for testing
+    test_data = training_data %>%
+      filter(block %in% bks[((length(bks)-tnum)+1):length(bks)])
+    test_labels = training_labels[(labels %in% bks[((length(bks)-tnum)+1):length(bks)])]
+    bks = bks[1:(length(bks)-tnum)]
+    training_data = training_data %>%
+      filter(block %in% bks)
+    training_labels = training_labels[labels %in% bks]
+    labels = labels[labels %in% bks]
+  }
   folds = createFolds(bks, k = K)
   
   error = numeric()
@@ -69,6 +83,7 @@ CVmaster = function(training_data, training_labels, classifier,
         filter(!(block %in% f)) %>%
         dplyr::select(!c(X, Y, image, block)) %>%
         mutate(trainy = trainy)
+    
     
     if (formula == TRUE) {
     formula_written = as.formula(paste("trainy ~ ", paste(colnames(train)
@@ -108,6 +123,7 @@ CVmaster = function(training_data, training_labels, classifier,
   }
   # average loss
   e = mean(error)
+  #print(e)
   # train on all data
   train = training_data %>%
     dplyr::select(!c(X, Y, image, block)) %>%

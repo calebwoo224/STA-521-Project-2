@@ -364,20 +364,23 @@ for (im in ims){
 #Splitting the blocks
 bks = sample(seq.int(from = 1, to = snum, by = 1))
 
-block_train_labels = tl[labels_block %in% bks[1:132]]
-block_valid_labels = tl[labels_block %in% bks[133:162]]
-block_test_labels = tl[labels_block %in% bks[163:192]]
+tnum = floor(length(bks)/6)
+tmin = snum - tnum
 
-block_train = td %>% filter(block %in% bks[1:132])
-block_valid = td %>% filter(block %in% bks[133:162])
-block_test = td %>% filter(block %in% bks[163:192])
+block_train_labels = tl[labels_block %in% bks[1:(tmin-30)]]
+block_valid_labels = tl[labels_block %in% bks[(tmin-29):tmin]]
+block_test_labels = tl[labels_block %in% bks[(tmin+1):snum]]
+
+block_train = td %>% filter(block %in% bks[1:(tmin-30)])
+block_valid = td %>% filter(block %in% bks[(tmin-29):tmin])
+block_test = td %>% filter(block %in% bks[(tmin+1):snum])
 
 invisible(mean(block_valid_labels != -1))
 invisible(mean(block_test_labels != -1))
 
 ```
 
-Next, we will run this trivial classifier on our image splitting method where we split image 2 in half for the validation and test sets. This method gives a validation set misclassification rate of $59.7\%$ and a test set misclassification rate of $52.7\%$, which is about in line with the overall rate of $-1$ labels being $40.3\%$ and $47.3\%$ respectively. Once again, this trivial classifier will have a high average accuracy if the majority of the points are $-1$ (cloudless). But since the majority of the points are not cloudless, this trivial classsifier will be very inaccurate.
+Next, we will run this trivial classifier on our image splitting method where we split image 2 in half for the validation and test sets. This method gives a validation set misclassification rate of $61.4\%$ and a test set misclassification rate of $65.9\%$, which is about in line with the overall rate of $-1$ labels being $38.6\%$ and $34.1\%$ respectively. Once again, this trivial classifier will have a high average accuracy if the majority of the points are $-1$ (cloudless). But since the majority of the points are not cloudless, this trivial classsifier will be very inaccurate.
 
 ```{r baseline-image-split}
 val_labels <- split_ims$val$Label
@@ -521,17 +524,53 @@ ggplot() +
 ```
 
 ```{r lda-block-split}
-btrain = td %>% 
-  mutate(Label = tl) %>%
-  filter(Label != 0)
-blabel <- btrain %>% pull(Label)
-btrain = btrain %>% dplyr::select(!Label)
+#btrain = td %>% 
+#  mutate(Label = tl) %>%
+#  filter(Label != 0)
+#blabel <- btrain %>% pull(Label)
+#btrain = btrain %>% dplyr::select(!Label)
 
-CVmaster(btrain, blabel, "lda",
-         K = 8, split = "done", type = "class", formula = FALSE)
+#btest = block_test %>%
+#  mutate(Label = block_test_labels) %>%
+#  filter(Label != 0)
+#btest_label = btest %>% pull(Label)
+#btest = btest %>% dplyr::select(!c(Label, block))
 
+#CVmaster(btrain, blabel, "lda",
+#         K = 8, split = "done", type = "class", formula = TRUE,
+#         test_data = btest, test_labels = btest_label)
+
+cv_lr_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
+                  K = 8, split = "block", type = "response",
+                  thresh=0.5, family="binomial")
+cv_lda_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "lda",
+                   K = 8, split = "block", type = "class")
+cv_qda_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "qda",
+                   K = 8, split = "block", type = "class")
+
+model_comp_b <- cbind(cv_lr_b$CV_loss, cv_lda_b$CV_loss, cv_qda_b$CV_loss)
+colnames(model_comp_b) <- c("LR", "LDA", "QDA")
+model_comp_b %>%
+  kable(digits = 3,
+        caption = "CV Model Comparison") %>%
+  kable_styling(latex_options = "HOLD_position", full_width = F)
 ```
 
+```{r}
+ggplot() +
+  geom_line(aes(x = 1 - cv_lr_b$roc_obj$specificities,
+                y = cv_lr_b$roc_obj$sensitivities,
+                color = paste0("LR AUC = ", round(cv_lr_b$roc_obj$auc, 3)))) +
+  geom_line(aes(x = 1 - cv_lda_b$roc_obj$specificities,
+                y = cv_lda_b$roc_obj$sensitivities,
+                color = paste0("LDA AUC = ", round(cv_lda_b$roc_obj$auc, 3)))) +
+  geom_line(aes(x = 1 - cv_qda_b$roc_obj$specificities,
+                y = cv_qda_b$roc_obj$sensitivities,
+                color = paste0("QDA AUC = ", round(cv_qda_b$roc_obj$auc, 3)))) +
+  labs(title = "Test ROC Model Comparison",
+       x = "1 - Specificity", y = "Sensitivity",
+       color = "ROC curves")
+```
 
 # Diagnostics
 
