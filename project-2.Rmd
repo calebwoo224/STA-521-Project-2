@@ -31,7 +31,7 @@ library(tidyr)
 library(e1071)
 library(randomForest)
 library(naivebayes)
-library(RSNNS)
+library(neuralnet)
 library(adabag)
 library(pROC)
 
@@ -457,8 +457,8 @@ We then wrote a function that allows us to pass in the name of a trivial classif
 
 #source("CVmaster.R")
 
-tl = c(block_train_labels, block_valid_labels)
-td = rbind(block_train, block_valid)
+#tl = c(block_train_labels, block_valid_labels)
+#td = rbind(block_train, block_valid)
 
 #CVmaster(td, tl, "qda", K = 8, split = "done", type = "class")
 ```
@@ -547,9 +547,13 @@ cv_lda_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "lda",
                    K = 8, split = "block", type = "class")
 cv_qda_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "qda",
                    K = 8, split = "block", type = "class")
+source("CVmaster.R")
+cv_mlp_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "tree",
+                   K = 8, split = "block", type = "vector")
 
-model_comp_b <- cbind(cv_lr_b$CV_loss, cv_lda_b$CV_loss, cv_qda_b$CV_loss)
-colnames(model_comp_b) <- c("LR", "LDA", "QDA")
+model_comp_b <- cbind(cv_lr_b$CV_loss, cv_lda_b$CV_loss, 
+                      cv_qda_b$CV_loss, cv_mlp_b$CV_loss)
+colnames(model_comp_b) <- c("LR", "LDA", "QDA", "MLP")
 model_comp_b %>%
   kable(digits = 3,
         caption = "CV Model Comparison") %>%
@@ -567,6 +571,9 @@ ggplot() +
   geom_line(aes(x = 1 - cv_qda_b$roc_obj$specificities,
                 y = cv_qda_b$roc_obj$sensitivities,
                 color = paste0("QDA AUC = ", round(cv_qda_b$roc_obj$auc, 3)))) +
+  geom_line(aes(x = 1 - cv_mlp_b$roc_obj$specificities,
+                y = cv_mlp_b$roc_obj$sensitivities,
+                color = paste0("QDA AUC = ", round(cv_mlp_b$roc_obj$auc, 3)))) +
   labs(title = "Test ROC Model Comparison",
        x = "1 - Specificity", y = "Sensitivity",
        color = "ROC curves")
