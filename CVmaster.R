@@ -69,8 +69,8 @@ CVmaster = function(training_data, training_labels, classifier,
   iter = 0
   for (f in folds){
     iter = iter + 1
-    print(paste0("Fold ", iter))
-    print(f)
+    #print(paste0("Fold ", iter))
+    #print(f)
     rows = c(rows,
              paste0("Fold ", iter, " CV-loss"))
     X = training_data %>%
@@ -162,8 +162,12 @@ CVmaster = function(training_data, training_labels, classifier,
       roc_obj <- roc(test_labels, preds$posterior[, "1"])
     }
     else if (classifier == "tree") {
-      roc_obj = roc(test_labels, preds[, "1"])
+      roc_obj <- roc(test_labels, preds[, "1"])
+    } 
+    else if (classifier == "knn3"){
+      roc_obj <- roc(test_labels, preds[, "1"])
     }
+    
     if (is.list(preds)) {
       preds = preds$class
     }

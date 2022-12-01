@@ -31,7 +31,7 @@ library(tidyr)
 library(e1071)
 library(randomForest)
 library(naivebayes)
-library(neuralnet)
+library(xgboost)
 library(adabag)
 library(pROC)
 
@@ -498,9 +498,15 @@ cv_lda <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "lda",
                    K = 8, split = "image", type = "class")
 cv_qda <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "qda",
                    K = 8, split = "image", type = "class")
+cv_tree <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "tree",
+                   K = 8, split = "image", type = "vector")
+cv_knn <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "knn3",
+                   K = 8, split = "image", type = "prob", k = 10)
 
-model_comp <- cbind(cv_lr$CV_loss, cv_lda$CV_loss, cv_qda$CV_loss)
-colnames(model_comp) <- c("LR", "LDA", "QDA")
+model_comp <- cbind(cv_lr$CV_loss, cv_lda$CV_loss, 
+                    cv_qda$CV_loss, cv_tree$CV_loss,
+                    cv_knn$CV_loss)
+colnames(model_comp) <- c("LR", "LDA", "QDA", "Tree", "10-NN")
 model_comp %>%
   kable(digits = 3,
         caption = "CV Model Comparison") %>%
@@ -518,28 +524,18 @@ ggplot() +
   geom_line(aes(x = 1 - cv_qda$roc_obj$specificities,
                 y = cv_qda$roc_obj$sensitivities,
                 color = paste0("QDA AUC = ", round(cv_qda$roc_obj$auc, 3)))) +
+  geom_line(aes(x = 1 - cv_tree$roc_obj$specificities,
+                y = cv_tree$roc_obj$sensitivities,
+                color = paste0("Tree AUC = ", round(cv_tree$roc_obj$auc, 3)))) +
+  geom_line(aes(x = 1 - cv_knn$roc_obj$specificities,
+                y = cv_knn$roc_obj$sensitivities,
+                color = paste0("10-nn AUC = ", round(cv_knn$roc_obj$auc, 3)))) +
   labs(title = "Test ROC Model Comparison",
        x = "1 - Specificity", y = "Sensitivity",
        color = "ROC curves")
 ```
 
-```{r lda-block-split}
-#btrain = td %>% 
-#  mutate(Label = tl) %>%
-#  filter(Label != 0)
-#blabel <- btrain %>% pull(Label)
-#btrain = btrain %>% dplyr::select(!Label)
-
-#btest = block_test %>%
-#  mutate(Label = block_test_labels) %>%
-#  filter(Label != 0)
-#btest_label = btest %>% pull(Label)
-#btest = btest %>% dplyr::select(!c(Label, block))
-
-#CVmaster(btrain, blabel, "lda",
-#         K = 8, split = "done", type = "class", formula = TRUE,
-#         test_data = btest, test_labels = btest_label)
-
+```{r block-split-CVs}
 cv_lr_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
                   K = 8, split = "block", type = "response",
                   thresh=0.5, family="binomial")
@@ -547,20 +543,23 @@ cv_lda_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "lda",
                    K = 8, split = "block", type = "class")
 cv_qda_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "qda",
                    K = 8, split = "block", type = "class")
-source("CVmaster.R")
-cv_mlp_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "tree",
+cv_tree_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "tree",
                    K = 8, split = "block", type = "vector")
+cv_knn_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "knn3",
+                   K = 8, split = "block", type = "prob", k = 10)
+
 
 model_comp_b <- cbind(cv_lr_b$CV_loss, cv_lda_b$CV_loss, 
-                      cv_qda_b$CV_loss, cv_mlp_b$CV_loss)
-colnames(model_comp_b) <- c("LR", "LDA", "QDA", "MLP")
+                      cv_qda_b$CV_loss, cv_tree_b$CV_loss,
+                      cv_knn_b$CV_loss)
+colnames(model_comp_b) <- c("LR", "LDA", "QDA", "Tree", "10-NN")
 model_comp_b %>%
   kable(digits = 3,
         caption = "CV Model Comparison") %>%
   kable_styling(latex_options = "HOLD_position", full_width = F)
 ```
 
-```{r}
+```{r block-ROC-comparison}
 ggplot() +
   geom_line(aes(x = 1 - cv_lr_b$roc_obj$specificities,
                 y = cv_lr_b$roc_obj$sensitivities,
@@ -571,9 +570,12 @@ ggplot() +
   geom_line(aes(x = 1 - cv_qda_b$roc_obj$specificities,
                 y = cv_qda_b$roc_obj$sensitivities,
                 color = paste0("QDA AUC = ", round(cv_qda_b$roc_obj$auc, 3)))) +
-  geom_line(aes(x = 1 - cv_mlp_b$roc_obj$specificities,
-                y = cv_mlp_b$roc_obj$sensitivities,
-                color = paste0("QDA AUC = ", round(cv_mlp_b$roc_obj$auc, 3)))) +
+  geom_line(aes(x = 1 - cv_tree_b$roc_obj$specificities,
+                y = cv_tree_b$roc_obj$sensitivities,
+                color = paste0("Tree AUC = ", round(cv_tree_b$roc_obj$auc, 3)))) +
+  geom_line(aes(x = 1 - cv_knn_b$roc_obj$specificities,
+                y = cv_knn_b$roc_obj$sensitivities,
+                color = paste0("10-nn AUC = ", round(cv_knn_b$roc_obj$auc, 3)))) +
   labs(title = "Test ROC Model Comparison",
        x = "1 - Specificity", y = "Sensitivity",
        color = "ROC curves")
