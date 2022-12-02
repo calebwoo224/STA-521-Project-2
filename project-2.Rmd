@@ -28,12 +28,10 @@ library(rpart)
 library(tidymodels)
 library(MASS)
 library(tidyr)
-library(e1071)
 library(randomForest)
 library(naivebayes)
-library(xgboost)
-library(adabag)
 library(pROC)
+library(gbm)
 
 source("CVmaster.R")
 source("image_split.R")
@@ -303,7 +301,7 @@ test_map <- ggplot(data=split_ims$test_data, aes(x=X, y=Y,
   scale_color_manual(labels = c("Not Cloud", "Unlabeled", "Cloud"),
                      values = c("chocolate3", "darkseagreen", "deepskyblue"),
                      name = "Label")
-grid.arrange(val_map, test_map, nrow=1)
+grid.arrange(test_map, val_map, nrow=1)
 ```
 
 ## Baseline
@@ -484,7 +482,7 @@ binary_pct %>%
   kable_styling(latex_options = "HOLD_position", full_width = F)
 ```
 
-```{r cv-model-comparison, message=FALSE}
+```{r image-split-CVs, message=FALSE}
 source("CVmaster.R")
 cv_lr <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
                   K = 8, split = "image", type = "response",
@@ -500,18 +498,22 @@ cv_knn <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "knn3",
 cv_rf <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "randomForest",
                   K = 8, split = "image", type = "prob",
                   ntree = 5)
+cv_gbm <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
+                   K = 8, split = "image", type = "response",
+                   distribution = "adaboost", bag.fraction = 1)
 
 model_comp <- cbind(cv_lr$CV_loss, cv_lda$CV_loss, 
                     cv_qda$CV_loss, cv_tree$CV_loss,
-                    cv_knn$CV_loss, cv_rf$CV_loss)
-colnames(model_comp) <- c("LR", "LDA", "QDA", "Tree", "10-NN", "RF")
+                    cv_knn$CV_loss, cv_rf$CV_loss,
+                    cv_gbm$CV_loss)
+colnames(model_comp) <- c("LR", "LDA", "QDA", "Tree", "10-NN", "RF", "GBM")
 model_comp %>%
   kable(digits = 3,
-        caption = "CV Model Comparison") %>%
+        caption = "Image Split Model Comparison") %>%
   kable_styling(latex_options = "HOLD_position", full_width = F)
 ```
 
-```{r ROC-comparison}
+```{r block-ROC-comparison}
 ggplot() +
   geom_line(aes(x = 1 - cv_lr$roc_obj$specificities,
                 y = cv_lr$roc_obj$sensitivities,
@@ -531,7 +533,10 @@ ggplot() +
   geom_line(aes(x = 1 - cv_rf$roc_obj$specificities,
                 y = cv_rf$roc_obj$sensitivities,
                 color = paste0("RF AUC = ", round(cv_rf$roc_obj$auc, 3)))) +
-  labs(title = "Test ROC Model Comparison",
+  geom_line(aes(x = 1 - cv_gbm$roc_obj$specificities,
+                y = cv_gbm$roc_obj$sensitivities,
+                color = paste0("GBM AUC = ", round(cv_gbm$roc_obj$auc, 3)))) +
+  labs(title = "Image Split Test ROC",
        x = "1 - Specificity", y = "Sensitivity",
        color = "ROC curves")
 ```
@@ -551,14 +556,18 @@ cv_knn_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "knn3",
 cv_rf_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "randomForest",
                   K = 8, split = "block", type = "prob",
                   ntree = 5)
+cv_gbm_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
+                   K = 8, split = "block", type = "response",
+                   distribution = "adaboost", bag.fraction = 1)
 
 model_comp_b <- cbind(cv_lr_b$CV_loss, cv_lda_b$CV_loss, 
                       cv_qda_b$CV_loss, cv_tree_b$CV_loss,
-                      cv_knn_b$CV_loss, cv_rf_b$CV_loss)
-colnames(model_comp_b) <- c("LR", "LDA", "QDA", "Tree", "10-NN", "RF")
+                      cv_knn_b$CV_loss, cv_rf_b$CV_loss,
+                      cv_gbm_b$CV_loss)
+colnames(model_comp_b) <- c("LR", "LDA", "QDA", "Tree", "10-NN", "RF", "GBM")
 model_comp_b %>%
   kable(digits = 3,
-        caption = "CV Model Comparison") %>%
+        caption = "Block Split Model Comparison") %>%
   kable_styling(latex_options = "HOLD_position", full_width = F)
 ```
 
@@ -582,6 +591,9 @@ ggplot() +
   geom_line(aes(x = 1 - cv_rf_b$roc_obj$specificities,
                 y = cv_rf_b$roc_obj$sensitivities,
                 color = paste0("RF AUC = ", round(cv_rf_b$roc_obj$auc, 3)))) +
+  geom_line(aes(x = 1 - cv_gbm_b$roc_obj$specificities,
+                y = cv_gbm_b$roc_obj$sensitivities,
+                color = paste0("GBM AUC = ", round(cv_gbm_b$roc_obj$auc, 3)))) +
   labs(title = "Test ROC Model Comparison",
        x = "1 - Specificity", y = "Sensitivity",
        color = "ROC curves")
@@ -645,50 +657,6 @@ lr_thresh_comp_b %>%
   kable(digits = 3,
         caption = "LR Threshold Comparison Block Split") %>%
   kable_styling(latex_options = "HOLD_position", full_width = F)
-```
-
-## Trying to get XGBoost working
-
-```{r}
-#dtrain <- xgb.DMatrix(data = as.matrix(X_cv[, -c(1:4, 6, 8, 9, 11, 12)]), label = X_cv$Label)
-ex_boost <- xgboost(data = as.matrix(X_cv[, -c(1:4, 6, 8, 9, 11, 12)]), label = X_cv$Label,
-                    nrounds = 2, objective = "binary:logistic", verbose = 0)
-```
-
-```{r}
-predict(ex_boost, as.matrix(X_cv[, -c(1:4, 6, 8, 9, 11, 12)]), type="response")
-```
-
-Invalid input data when using CVmaster.R
-
-```{r}
-source("CVmaster.R")
-CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], X_cv$Label, "xgboost", formula = F,
-         K = 8, split = "image", type = "response",
-         nrounds = 2, nthread = 2,
-         objective = "binary:logistic", verbose = 0)
-```
-
-## Trying to get AdaBoost working
-
-```{r}
-ex_ada <- boosting(y_cv ~ NDAI + CORR + BF, data = cbind(X_cv, y_cv), boos = F, mfinal = 2,
-                   control = rpart.control(maxdepth = 1))
-```
-
-```{r}
-ada_preds <- predict(ex_ada, X_cv[, -c(1:4, 6, 8, 9, 11, 12)], type="prob")
-ada_preds
-```
-
-Weight vector different variable length when using CVmaster.R
-
-```{r}
-source("CVmaster.R")
-CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "boosting",
-                   K = 8, split = "image", type = "prob",
-                   boos = F, mfinal = 2,
-         control = rpart.control(maxdepth = 1))
 ```
 
 # Diagnostics

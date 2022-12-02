@@ -77,12 +77,14 @@ CVmaster = function(training_data, training_labels, classifier,
       filter(block %in% f) %>%
       dplyr::select(!c(X, Y, image, block))
     y = training_labels[labels %in% f]
-    
     trainy = training_labels[!(labels %in% f)]
     train = training_data %>%
         filter(!(block %in% f)) %>%
         dplyr::select(!c(X, Y, image, block)) %>%
         mutate(trainy = trainy)
+    if (classifier == "gbm") {
+      train[, "trainy"] = as.numeric(as.character(train[, "trainy"]))
+    }
     if (formula == TRUE) {
       formula_written = as.formula(paste("trainy ~ ", paste(colnames(train)
                            [-length(colnames(train))], 
@@ -94,30 +96,15 @@ CVmaster = function(training_data, training_labels, classifier,
                       ), ags)
       )
     } else {
-      if (classifier == "xgboost") {
-        Xv = train %>%
-          dplyr::select(!trainy) %>%
-          as.matrix()
-        model = do.call(classifier, 
-                        list(
-                          params = append(
-                          list(
-                          Xv,
-                          trainy
-                        ), ags))
-        )
-      }
-      else {
-        Xv = train %>%
-          dplyr::select(!trainy) %>%
-          as.matrix()
-        model = do.call(classifier,
-                        append(list(
-                          Xv,
-                          trainy
-                        ), ags)
-        )
-      }
+      Xv = train %>%
+        dplyr::select(!trainy) %>%
+        as.matrix()
+      model = do.call(classifier,
+                      append(list(
+                        Xv,
+                        trainy
+                      ), ags)
+      )
     }
     preds = predict(model, X, type = type)
     if (is.list(preds)) {
@@ -126,7 +113,6 @@ CVmaster = function(training_data, training_labels, classifier,
     if(type == "prob" | type == "vector") {
       preds = apply(preds, MARGIN = 1, FUN = which.max) - 1
     }
-    # logistic regression
     if (type == "response") {
       preds <- ifelse(preds > thresh, 1, 0)
     }
@@ -141,6 +127,9 @@ CVmaster = function(training_data, training_labels, classifier,
   train = training_data %>%
     dplyr::select(!c(X, Y, image, block)) %>%
     mutate(trainy = training_labels)
+  if (classifier == "gbm") {
+    train[, "trainy"] = as.numeric(as.character(train[, "trainy"]))
+  }
   if (formula == TRUE) {
     formula_written = as.formula(paste("trainy ~ ", paste(colnames(train)
                                                           [-length(colnames(train))], 
@@ -168,7 +157,7 @@ CVmaster = function(training_data, training_labels, classifier,
     test_data = test_data[, cols]
     preds = predict(model, test_data, type=type)
     # test ROC
-    if (classifier == "glm" | classifier == "xgboost") {
+    if (classifier == "glm" | classifier == "gbm") {
       roc_obj <- roc(test_labels, preds)
     }
     else if (classifier == "lda" | classifier == "qda") {
