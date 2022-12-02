@@ -546,19 +546,19 @@ cv_lr_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
                   K = 8, split = "block", type = "response",
                   thresh=0.4, family="binomial")
 cv_lda_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "lda",
-                   K = 8, split = "block", type = "class")
+                  K = 8, split = "block", type = "class")
 cv_qda_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "qda",
-                   K = 8, split = "block", type = "class")
+                  K = 8, split = "block", type = "class")
 cv_tree_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "tree",
-                   K = 8, split = "block", type = "vector")
+                  K = 8, split = "block", type = "vector")
 cv_knn_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "knn3",
-                   K = 8, split = "block", type = "prob", k = 10)
+                  K = 8, split = "block", type = "prob", k = 10)
 cv_rf_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "randomForest",
                   K = 8, split = "block", type = "prob",
                   ntree = 5)
 cv_gbm_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
-                   K = 8, split = "block", type = "response",
-                   distribution = "adaboost", bag.fraction = 1)
+                  K = 8, split = "block", type = "response",
+                  distribution = "adaboost", bag.fraction = 1)
 
 model_comp_b <- cbind(cv_lr_b$CV_loss, cv_lda_b$CV_loss, 
                       cv_qda_b$CV_loss, cv_tree_b$CV_loss,
@@ -660,5 +660,15 @@ lr_thresh_comp_b %>%
 ```
 
 # Diagnostics
+
+## Diagnostics of AdaBoost
+
+## Comparing Misclassification Errors
+
+## Finding a Better Classifier
+
+## Comparing Split Methods
+
+## Conclusion
 
 # References
