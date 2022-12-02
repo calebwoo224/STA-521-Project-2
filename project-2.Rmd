@@ -473,7 +473,7 @@ y_cv <- as.factor(y_cv)
 
 binary_pct <- X_cv %>%
               count(Label) %>%
-              summarise(pct = n/nrow(X_cv))
+              summarise(pct = 100*n/nrow(X_cv))
 rownames(binary_pct) <- c("Not Cloud", "Cloud")
 colnames(binary_pct) <- c("% of pixels")
 binary_pct %>%
@@ -594,7 +594,7 @@ ggplot() +
   geom_line(aes(x = 1 - cv_gbm_b$roc_obj$specificities,
                 y = cv_gbm_b$roc_obj$sensitivities,
                 color = paste0("GBM AUC = ", round(cv_gbm_b$roc_obj$auc, 3)))) +
-  labs(title = "Test ROC Model Comparison",
+  labs(title = "Block Split Test ROC",
        x = "1 - Specificity", y = "Sensitivity",
        color = "ROC curves")
 ```
