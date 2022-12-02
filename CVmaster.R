@@ -83,28 +83,41 @@ CVmaster = function(training_data, training_labels, classifier,
         filter(!(block %in% f)) %>%
         dplyr::select(!c(X, Y, image, block)) %>%
         mutate(trainy = trainy)
-    
-    
     if (formula == TRUE) {
-    formula_written = as.formula(paste("trainy ~ ", paste(colnames(train)
-                         [-length(colnames(train))], 
-                         collapse = "+ ")))
-    model = do.call(classifier,
-                    append(list(
-                      formula_written,
-                      data = as_tibble(train)
-                 ), ags)
-                )
-    } else {
-      Xv = train %>%
-        dplyr::select(!trainy) %>%
-        as.matrix()
+      formula_written = as.formula(paste("trainy ~ ", paste(colnames(train)
+                           [-length(colnames(train))], 
+                           collapse = "+ ")))
       model = do.call(classifier,
-                    append(list(
-                      Xv,
-                      trainy
-                    ), ags)
-    )
+                      append(list(
+                        formula_written,
+                        as_tibble(train)
+                      ), ags)
+      )
+    } else {
+      if (classifier == "xgboost") {
+        Xv = train %>%
+          dplyr::select(!trainy) %>%
+          as.matrix()
+        model = do.call(classifier, 
+                        list(
+                          params = append(
+                          list(
+                          Xv,
+                          trainy
+                        ), ags))
+        )
+      }
+      else {
+        Xv = train %>%
+          dplyr::select(!trainy) %>%
+          as.matrix()
+        model = do.call(classifier,
+                        append(list(
+                          Xv,
+                          trainy
+                        ), ags)
+        )
+      }
     }
     preds = predict(model, X, type = type)
     if (is.list(preds)) {
@@ -135,7 +148,7 @@ CVmaster = function(training_data, training_labels, classifier,
     model = do.call(classifier,
                     append(list(
                       formula_written,
-                      data = as_tibble(train)
+                      as_tibble(train)
                     ), ags)
     )
   } else {
@@ -155,16 +168,13 @@ CVmaster = function(training_data, training_labels, classifier,
     test_data = test_data[, cols]
     preds = predict(model, test_data, type=type)
     # test ROC
-    if (classifier == "glm") {
+    if (classifier == "glm" | classifier == "xgboost") {
       roc_obj <- roc(test_labels, preds)
     }
     else if (classifier == "lda" | classifier == "qda") {
       roc_obj <- roc(test_labels, preds$posterior[, "1"])
     }
-    else if (classifier == "tree") {
-      roc_obj <- roc(test_labels, preds[, "1"])
-    } 
-    else if (classifier == "knn3"){
+    else if (classifier %in% c("tree", "knn3", "randomForest")) {
       roc_obj <- roc(test_labels, preds[, "1"])
     }
     

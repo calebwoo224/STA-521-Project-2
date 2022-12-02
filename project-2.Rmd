@@ -284,7 +284,7 @@ In splitting the dataset into training, validation, and test subsets, it is impo
 A second method for splitting the data into three sets is to assign all data from images 1 and 3 to the training data. Then we can split the image 2 data in half to assign each half to the validation and test sets respectively. By doing so, we retain the majority of the data for training to better fit our classifiers. In addition, by splitting image 2 in half, we still retain the spatial structure of the data for the validation and test sets. We believe that image 2 is the best choice to split in half for our validation and test sets because each half contains numerous samples from each class. Looking at the maps of the validation and test sets below, we see that each set contains a sizable number of cloud, unlabeled, and non-cloud samples so that we are validating and testing our classifiers on a similar number of samples per class. Since we would like to incorporate this image split method with the cross validation function, we will incorporate the validation data which is half of image 2 into the training data and use the validation data along with the training data from images 1 and 3 to train and validate on K folds of data before checking how the trained model will perform on the separate test data from image 2.
 
 ```{r val-test-maps}
-split_ims <- image_split(data[,-4], data[,4], 5)
+split_ims <- image_split(data[,-4], data[,4], K=8)
 
 val_map <- ggplot(data=split_ims$val_data, aes(x=X, y=Y,
                                                color=factor(split_ims$val_labels))) +
@@ -463,8 +463,7 @@ We then wrote a function that allows us to pass in the name of a trivial classif
 #CVmaster(td, tl, "qda", K = 8, split = "done", type = "class")
 ```
 
-```{r lr-split-comparison, message=FALSE}
-source("CVmaster.R")
+```{r binary-data-all}
 X_cv <- data %>%
   filter(Label != 0) %>%
   mutate(Label = ifelse(
@@ -474,18 +473,14 @@ X_cv <- data %>%
 y_cv <- X_cv %>% pull(Label)
 y_cv <- as.factor(y_cv)
 
-image_lr <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
-                       K = 8, split = "image", type = "response",
-                       thresh=0.5, family="binomial")
-block_lr <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
-                       K = 8, split = "block", type = "response",
-                       thresh=0.5, family="binomial")
-
-lr_comp <- cbind(image_lr$CV_loss, block_lr$CV_loss)
-colnames(lr_comp) <- c("Image Split LR", "Block Split LR")
-lr_comp %>%
+binary_pct <- X_cv %>%
+              count(Label) %>%
+              summarise(pct = n/nrow(X_cv))
+rownames(binary_pct) <- c("Not Cloud", "Cloud")
+colnames(binary_pct) <- c("% of pixels")
+binary_pct %>%
   kable(digits = 3,
-        caption = "Logistic Regression Split Comparison") %>%
+        caption = "Cloud vs Not Cloud Binary Percentages") %>%
   kable_styling(latex_options = "HOLD_position", full_width = F)
 ```
 
@@ -493,7 +488,7 @@ lr_comp %>%
 source("CVmaster.R")
 cv_lr <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
                   K = 8, split = "image", type = "response",
-                  thresh=0.5, family="binomial")
+                  thresh=0.4, family="binomial")
 cv_lda <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "lda",
                    K = 8, split = "image", type = "class")
 cv_qda <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "qda",
@@ -502,11 +497,14 @@ cv_tree <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "tree",
                    K = 8, split = "image", type = "vector")
 cv_knn <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "knn3",
                    K = 8, split = "image", type = "prob", k = 10)
+cv_rf <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "randomForest",
+                  K = 8, split = "image", type = "prob",
+                  ntree = 5)
 
 model_comp <- cbind(cv_lr$CV_loss, cv_lda$CV_loss, 
                     cv_qda$CV_loss, cv_tree$CV_loss,
-                    cv_knn$CV_loss)
-colnames(model_comp) <- c("LR", "LDA", "QDA", "Tree", "10-NN")
+                    cv_knn$CV_loss, cv_rf$CV_loss)
+colnames(model_comp) <- c("LR", "LDA", "QDA", "Tree", "10-NN", "RF")
 model_comp %>%
   kable(digits = 3,
         caption = "CV Model Comparison") %>%
@@ -530,15 +528,18 @@ ggplot() +
   geom_line(aes(x = 1 - cv_knn$roc_obj$specificities,
                 y = cv_knn$roc_obj$sensitivities,
                 color = paste0("10-nn AUC = ", round(cv_knn$roc_obj$auc, 3)))) +
+  geom_line(aes(x = 1 - cv_rf$roc_obj$specificities,
+                y = cv_rf$roc_obj$sensitivities,
+                color = paste0("RF AUC = ", round(cv_rf$roc_obj$auc, 3)))) +
   labs(title = "Test ROC Model Comparison",
        x = "1 - Specificity", y = "Sensitivity",
        color = "ROC curves")
 ```
 
-```{r block-split-CVs}
+```{r block-split-CVs, message=FALSE}
 cv_lr_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
                   K = 8, split = "block", type = "response",
-                  thresh=0.5, family="binomial")
+                  thresh=0.4, family="binomial")
 cv_lda_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "lda",
                    K = 8, split = "block", type = "class")
 cv_qda_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "qda",
@@ -547,12 +548,14 @@ cv_tree_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "tree",
                    K = 8, split = "block", type = "vector")
 cv_knn_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "knn3",
                    K = 8, split = "block", type = "prob", k = 10)
-
+cv_rf_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "randomForest",
+                  K = 8, split = "block", type = "prob",
+                  ntree = 5)
 
 model_comp_b <- cbind(cv_lr_b$CV_loss, cv_lda_b$CV_loss, 
                       cv_qda_b$CV_loss, cv_tree_b$CV_loss,
-                      cv_knn_b$CV_loss)
-colnames(model_comp_b) <- c("LR", "LDA", "QDA", "Tree", "10-NN")
+                      cv_knn_b$CV_loss, cv_rf_b$CV_loss)
+colnames(model_comp_b) <- c("LR", "LDA", "QDA", "Tree", "10-NN", "RF")
 model_comp_b %>%
   kable(digits = 3,
         caption = "CV Model Comparison") %>%
@@ -576,9 +579,116 @@ ggplot() +
   geom_line(aes(x = 1 - cv_knn_b$roc_obj$specificities,
                 y = cv_knn_b$roc_obj$sensitivities,
                 color = paste0("10-nn AUC = ", round(cv_knn_b$roc_obj$auc, 3)))) +
+  geom_line(aes(x = 1 - cv_rf_b$roc_obj$specificities,
+                y = cv_rf_b$roc_obj$sensitivities,
+                color = paste0("RF AUC = ", round(cv_rf_b$roc_obj$auc, 3)))) +
   labs(title = "Test ROC Model Comparison",
        x = "1 - Specificity", y = "Sensitivity",
        color = "ROC curves")
+```
+
+## Logistic Regression Threshold Tuning
+
+```{r lr-thresh-comp-image, message=FALSE}
+cv_lr_3 <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
+                  K = 8, split = "image", type = "response",
+                  thresh=0.3, family="binomial")
+cv_lr_35 <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
+                  K = 8, split = "image", type = "response",
+                  thresh=0.35, family="binomial")
+cv_lr_4 <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
+                  K = 8, split = "image", type = "response",
+                  thresh=0.4, family="binomial")
+cv_lr_45 <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
+                  K = 8, split = "image", type = "response",
+                  thresh=0.45, family="binomial")
+cv_lr_5 <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
+                  K = 8, split = "image", type = "response",
+                  thresh=0.5, family="binomial")
+
+lr_thresh_comp <- cbind(cv_lr_3$CV_loss, cv_lr_35$CV_loss,
+                        cv_lr_4$CV_loss, cv_lr_45$CV_loss,
+                        cv_lr_5$CV_loss)
+colnames(lr_thresh_comp) <- c("Thresh = 0.3", "Thresh = 0.35",
+                              "Thresh = 0.4", "Thresh = 0.45",
+                              "Thresh = 0.5")
+lr_thresh_comp %>%
+  kable(digits = 3,
+        caption = "LR Threshold Comparison Image Split") %>%
+  kable_styling(latex_options = "HOLD_position", full_width = F)
+```
+
+```{r lr-thresh-comp-block, message=FALSE}
+cv_lr_3_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
+                  K = 8, split = "block", type = "response",
+                  thresh=0.3, family="binomial")
+cv_lr_35_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
+                  K = 8, split = "block", type = "response",
+                  thresh=0.35, family="binomial")
+cv_lr_4_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
+                  K = 8, split = "block", type = "response",
+                  thresh=0.4, family="binomial")
+cv_lr_45_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
+                  K = 8, split = "block", type = "response",
+                  thresh=0.45, family="binomial")
+cv_lr_5_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
+                  K = 8, split = "block", type = "response",
+                  thresh=0.5, family="binomial")
+
+lr_thresh_comp_b <- cbind(cv_lr_3_b$CV_loss, cv_lr_35_b$CV_loss,
+                        cv_lr_4_b$CV_loss, cv_lr_45_b$CV_loss,
+                        cv_lr_5_b$CV_loss)
+colnames(lr_thresh_comp_b) <- c("Thresh = 0.3", "Thresh = 0.35",
+                              "Thresh = 0.4", "Thresh = 0.45",
+                              "Thresh = 0.5")
+lr_thresh_comp_b %>%
+  kable(digits = 3,
+        caption = "LR Threshold Comparison Block Split") %>%
+  kable_styling(latex_options = "HOLD_position", full_width = F)
+```
+
+## Trying to get XGBoost working
+
+```{r}
+#dtrain <- xgb.DMatrix(data = as.matrix(X_cv[, -c(1:4, 6, 8, 9, 11, 12)]), label = X_cv$Label)
+ex_boost <- xgboost(data = as.matrix(X_cv[, -c(1:4, 6, 8, 9, 11, 12)]), label = X_cv$Label,
+                    nrounds = 2, objective = "binary:logistic", verbose = 0)
+```
+
+```{r}
+predict(ex_boost, as.matrix(X_cv[, -c(1:4, 6, 8, 9, 11, 12)]), type="response")
+```
+
+Invalid input data when using CVmaster.R
+
+```{r}
+source("CVmaster.R")
+CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], X_cv$Label, "xgboost", formula = F,
+         K = 8, split = "image", type = "response",
+         nrounds = 2, nthread = 2,
+         objective = "binary:logistic", verbose = 0)
+```
+
+## Trying to get AdaBoost working
+
+```{r}
+ex_ada <- boosting(y_cv ~ NDAI + CORR + BF, data = cbind(X_cv, y_cv), boos = F, mfinal = 2,
+                   control = rpart.control(maxdepth = 1))
+```
+
+```{r}
+ada_preds <- predict(ex_ada, X_cv[, -c(1:4, 6, 8, 9, 11, 12)], type="prob")
+ada_preds
+```
+
+Weight vector different variable length when using CVmaster.R
+
+```{r}
+source("CVmaster.R")
+CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "boosting",
+                   K = 8, split = "image", type = "prob",
+                   boos = F, mfinal = 2,
+         control = rpart.control(maxdepth = 1))
 ```
 
 # Diagnostics
