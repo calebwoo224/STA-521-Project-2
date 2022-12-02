@@ -52,7 +52,7 @@ CVmaster = function(training_data, training_labels, classifier,
   bks = seq.int(from = 1, to = snum, by = 1)
   if (split == "block") {
     bks = sample(bks)
-    tnum = floor(length(bks)/6) #Set ~1/6 for testing
+    tnum = floor(length(bks)/5) #Set ~1/5 for testing
     test_data = training_data %>%
       filter(block %in% bks[((length(bks)-tnum)+1):length(bks)])
     test_labels = training_labels[(labels %in% bks[((length(bks)-tnum)+1):length(bks)])]
