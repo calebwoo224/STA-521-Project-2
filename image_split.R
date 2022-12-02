@@ -17,10 +17,10 @@ image_split <- function(data, labels, K) {
       n <- nrow(val_test)
       half_i <- floor(nrow(val_test)/2)
       
-      val <- val_test[1:half_i, -ncol(val_test)]
-      val_labels <- val_test[1:half_i, ncol(val_test)]
-      test <- val_test[(half_i+1):n, -ncol(val_test)]
-      test_labels <- val_test[(half_i+1):n, ncol(val_test)]
+      test <- val_test[1:half_i, -ncol(val_test)]
+      test_labels <- val_test[1:half_i, ncol(val_test)]
+      val <- val_test[(half_i+1):n, -ncol(val_test)]
+      val_labels <- val_test[(half_i+1):n, ncol(val_test)]
       
       xvals = val %>%
         filter(image == im) %>%
