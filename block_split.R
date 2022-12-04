@@ -1,4 +1,6 @@
-block_split = function(training_data, training_labels, K) {
+block_split = function(training_data, training_labels, K, seed) {
+  
+  set.seed(seed)
   
   training_data$block = rep(0, nrow(training_data))
   training_labels_block = numeric()

@@ -32,7 +32,7 @@ CVmaster = function(training_data, training_labels, classifier,
 # } else
   
   if (split == "block"){
-    output = block_split(training_data, training_labels, K)
+    output = block_split(training_data, training_labels, K, seed=seed)
     training_data = output$training_data
     labels = output$labels
     snum = output$snum
