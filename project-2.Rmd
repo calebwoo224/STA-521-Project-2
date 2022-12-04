@@ -107,7 +107,7 @@ map3 <- ggplot(data=image3, aes(x=X, y=Y, color=factor(Label))) +
                      values = c("chocolate3", "darkseagreen", "deepskyblue"),
                      name = "Label")
 
-leg = get_legend(map3)
+leg = ggpubr::get_legend(map3)
 
 map3 = map3 +
   theme(legend.position = "none")
@@ -513,7 +513,7 @@ The function also allows for the image splitting method described in Section 2(a
 
 # Modeling
 
-```{r image-split-CVs, message=FALSE}
+```{r image-split-CVs, include=FALSE, warning=FALSE, message=FALSE}
 source("CVmaster.R")
 cv_lr <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
                   K = 8, split = "image", type = "response",
@@ -524,8 +524,6 @@ cv_qda <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "qda",
                    K = 8, split = "image", type = "class")
 cv_tree <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "tree",
                    K = 8, split = "image", type = "vector")
-cv_knn <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "knn3",
-                   K = 8, split = "image", type = "prob", k = 10)
 cv_rf <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "randomForest",
                   K = 8, split = "image", type = "prob",
                   ntree = 5)
@@ -557,10 +555,9 @@ image_split_baseline <- c(image_split_baseline,
 ```{r image-split-comparisons, message=FALSE}
 model_comp <- cbind(cv_lr$CV_loss, cv_lda$CV_loss, 
                     cv_qda$CV_loss, cv_tree$CV_loss,
-                    cv_knn$CV_loss, cv_rf$CV_loss,
-                    cv_gbm$CV_loss,
+                    cv_rf$CV_loss, cv_gbm$CV_loss,
                     image_split_baseline)
-colnames(model_comp) <- c("LR", "LDA", "QDA", "Tree", "10-NN", "RF", "GBM",
+colnames(model_comp) <- c("LR", "LDA", "QDA", "Tree", "RF", "GBM",
                           "Baseline")
 model_comp %>%
   kable(digits = 3,
@@ -582,9 +579,6 @@ ggplot() +
   geom_line(aes(x = 1 - cv_tree$roc_obj$specificities,
                 y = cv_tree$roc_obj$sensitivities,
                 color = paste0("Tree AUC = ", round(cv_tree$roc_obj$auc, 3)))) +
-  geom_line(aes(x = 1 - cv_knn$roc_obj$specificities,
-                y = cv_knn$roc_obj$sensitivities,
-                color = paste0("10-nn AUC = ", round(cv_knn$roc_obj$auc, 3)))) +
   geom_line(aes(x = 1 - cv_rf$roc_obj$specificities,
                 y = cv_rf$roc_obj$sensitivities,
                 color = paste0("RF AUC = ", round(cv_rf$roc_obj$auc, 3)))) +
@@ -641,8 +635,6 @@ cv_qda_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "qda",
                   K = 8, split = "block", type = "class")
 cv_tree_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "tree",
                   K = 8, split = "block", type = "vector")
-cv_knn_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "knn3",
-                  K = 8, split = "block", type = "prob", k = 10)
 cv_rf_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "randomForest",
                   K = 8, split = "block", type = "prob",
                   ntree = 5)
@@ -652,10 +644,10 @@ cv_gbm_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
 
 model_comp_b <- cbind(cv_lr_b$CV_loss, cv_lda_b$CV_loss, 
                       cv_qda_b$CV_loss, cv_tree_b$CV_loss,
-                      cv_knn_b$CV_loss, cv_rf_b$CV_loss,
-                      cv_gbm_b$CV_loss, block_split_baseline)
+                      cv_rf_b$CV_loss, cv_gbm_b$CV_loss,
+                      block_split_baseline)
 colnames(model_comp_b) <- c("LR", "LDA", "QDA", "Tree", 
-                            "10-NN", "RF", "GBM", "Baseline")
+                            "RF", "GBM", "Baseline")
 model_comp_b %>%
   kable(digits = 3,
         caption = "Block Split Model Comparison") %>%
@@ -676,9 +668,6 @@ ggplot() +
   geom_line(aes(x = 1 - cv_tree_b$roc_obj$specificities,
                 y = cv_tree_b$roc_obj$sensitivities,
                 color = paste0("Tree AUC = ", round(cv_tree_b$roc_obj$auc, 3)))) +
-  geom_line(aes(x = 1 - cv_knn_b$roc_obj$specificities,
-                y = cv_knn_b$roc_obj$sensitivities,
-                color = paste0("10-nn AUC = ", round(cv_knn_b$roc_obj$auc, 3)))) +
   geom_line(aes(x = 1 - cv_rf_b$roc_obj$specificities,
                 y = cv_rf_b$roc_obj$sensitivities,
                 color = paste0("RF AUC = ", round(cv_rf_b$roc_obj$auc, 3)))) +

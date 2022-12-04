@@ -64,6 +64,8 @@ CVmaster = function(training_data, training_labels, classifier,
   }
   folds = createFolds(bks, k = K)
   
+  cv_preds = list()
+  cv_response_preds = list()
   error = numeric()
   rows = character()
   iter = 0
@@ -114,8 +116,10 @@ CVmaster = function(training_data, training_labels, classifier,
       preds = apply(preds, MARGIN = 1, FUN = which.max) - 1
     }
     if (type == "response") {
+      cv_response_preds[[paste0("Fold", iter)]] = preds
       preds <- ifelse(preds > thresh, 1, 0)
     }
+    cv_preds[[paste0("Fold", iter)]] = preds
     err = 1 - mean(preds == y)
     error = c(error, err)
     #print(paste0("CV-loss for fold ", iter, ": ", err))
@@ -167,6 +171,7 @@ CVmaster = function(training_data, training_labels, classifier,
       roc_obj <- roc(test_labels, preds[, "1"])
     }
     
+    test_response_preds = NULL
     if (is.list(preds)) {
       preds = preds$class
     }
@@ -174,8 +179,10 @@ CVmaster = function(training_data, training_labels, classifier,
       preds = apply(preds, MARGIN = 1, FUN = which.max) - 1
     }
     if (type == "response") {
+      test_response_preds = preds
       preds <- ifelse(preds > thresh, 1, 0)
     }
+    test_preds = preds
     test_error = 1 - mean(preds == test_labels)
   }
   else {
@@ -191,6 +198,10 @@ CVmaster = function(training_data, training_labels, classifier,
   #print(paste0("The ", K, "-fold CV-loss is: ", e))
   return(list(
     "CV_loss" = df,
-    "roc_obj" = roc_obj
+    "roc_obj" = roc_obj,
+    "cv_preds" = cv_preds,
+    "cv_response_preds" = cv_response_preds,
+    "test_preds" = test_preds,
+    "test_response_preds" = test_response_preds
   ))
 }
