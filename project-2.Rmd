@@ -517,12 +517,36 @@ cv_rf <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "randomForest",
 cv_gbm <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
                    K = 8, split = "image", type = "response",
                    distribution = "adaboost", bag.fraction = 1)
+```
 
+```{r image-split-baseline, include=FALSE}
+im_block_labels <- binary_image_split$training_data %>%
+  group_by(block, Label) %>%
+  summarise(n = n())
+
+image_split_baseline <- c()
+for (b in unique(im_block_labels$block)) {
+  freqs <- im_block_labels %>%
+    filter(block == b) %>%
+    summarise(freq = n/sum(n)) %>%
+    pull(freq)
+  image_split_baseline <- c(image_split_baseline, freqs[2])
+}
+image_split_baseline <- c(image_split_baseline,
+                          mean(image_split_baseline))
+image_split_baseline <- c(image_split_baseline,
+                          sum(binary_image_split$test_labels != 0)/
+                            length(binary_image_split$test_labels))
+```
+
+```{r image-split-comparisons, message=FALSE}
 model_comp <- cbind(cv_lr$CV_loss, cv_lda$CV_loss, 
                     cv_qda$CV_loss, cv_tree$CV_loss,
                     cv_knn$CV_loss, cv_rf$CV_loss,
-                    cv_gbm$CV_loss)
-colnames(model_comp) <- c("LR", "LDA", "QDA", "Tree", "10-NN", "RF", "GBM")
+                    cv_gbm$CV_loss,
+                    image_split_baseline)
+colnames(model_comp) <- c("LR", "LDA", "QDA", "Tree", "10-NN", "RF", "GBM",
+                          "Baseline")
 model_comp %>%
   kable(digits = 3,
         caption = "Image Split Model Comparison") %>%
