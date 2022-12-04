@@ -280,9 +280,10 @@ These density plots reinforce the same ideas seen in the correlations above. In 
 
 In splitting the dataset into training, validation, and test subsets, it is important to preserve the structure of the data, that is, that the observations are denoted by their X and Y spatial coordinates, and any split of the data would have to preserve this spatial structure. One method for doing so is to carve each image up into some $k$ blocks, and then to randomly permute the block identifiers, the range of numbers from 1 to $3k$, and then take a split from the random block permutations. Such a method does preserve the spatial structure of the data, as each point is in a set with some (or all if not an edge) of the points around it. The random permutation of the blocks also ensures that, while the spatial structure of the points relative to each other is preserved, the structure of the image is not considered in the model, such that the orientation and structure of a individual image is a considered feature of the model.
 
-A second method for splitting the data into three sets is to assign all data from images 1 and 3 to the training data. Then we can split the image 2 data in half to assign each half to the validation and test sets respectively. By doing so, we retain the majority of the data for training to better fit our classifiers. In addition, by splitting image 2 in half, we still retain the spatial structure of the data for the validation and test sets. We believe that image 2 is the best choice to split in half for our validation and test sets because each half contains numerous samples from each class. Looking at the maps of the validation and test sets below, we see that each set contains a sizable number of cloud, unlabeled, and non-cloud samples so that we are validating and testing our classifiers on a similar number of samples per class. Since we would like to incorporate this image split method with the cross validation function, we will incorporate the validation data which is half of image 2 into the training data and use the validation data along with the training data from images 1 and 3 to train and validate on K folds of data before checking how the trained model will perform on the separate test data from image 2.
+A second method for splitting the data into three sets is to assign all data from images 1 and 3 to the training data. Then we can split the image 2 data in half to assign each half to the validation and test sets respectively. By doing so, we retain the majority of the data for training to better fit our classifiers. In addition, by splitting image 2 in half, we still retain the spatial structure of the data for the validation and test sets. We believe that image 2 is the best choice to split in half for our validation and test sets because each half contains numerous samples from each class. Looking at the maps of the validation and test sets below, we see that each set contains a sizable number of cloud and non-cloud samples. Since we would like to incorporate this image split method with the cross validation function, we will incorporate the validation data which is half of image 2 into the training data and use the validation data along with the training data from images 1 and 3 to train and validate on K folds of data before checking how the trained model will perform on the separate test data from image 2.
 
 ```{r val-test-maps}
+#source("image_split.R")
 split_ims <- image_split(data[,-4], data[,4], K=8)
 
 val_map <- ggplot(data=split_ims$val_data, aes(x=X, y=Y,
@@ -292,8 +293,7 @@ val_map <- ggplot(data=split_ims$val_data, aes(x=X, y=Y,
   labs(title = "Validation Set") +
   scale_color_manual(labels = c("Not Cloud", "Unlabeled", "Cloud"),
                      values = c("chocolate3", "darkseagreen", "deepskyblue"),
-                     name = "Label") +
-  theme(legend.position = "none")
+                     name = "Label")
 test_map <- ggplot(data=split_ims$test_data, aes(x=X, y=Y,
                                             color=factor(split_ims$test_labels))) +
   geom_point() +
@@ -301,13 +301,37 @@ test_map <- ggplot(data=split_ims$test_data, aes(x=X, y=Y,
   labs(title = "Test Set") +
   scale_color_manual(labels = c("Not Cloud", "Unlabeled", "Cloud"),
                      values = c("chocolate3", "darkseagreen", "deepskyblue"),
-                     name = "Label")
+                     name = "Label") +
+  theme(legend.position = "none")
 grid.arrange(test_map, val_map, nrow=1)
 ```
 
 ## Baseline
 
+Before splitting the data, we first remove all observations with 0 labels which correspond to the unlabeled points because we are primarily focused on detecting the presence of clouds or no clouds in the images. Therefore, a binary classification task between the 1 and -1 labels is a more appropriate way of approaching this problem. Even if we approached this problem as a multi-classification task between 3 different labels and were predicting all 3 labels accurately, predicting the unlabeled points accurately is somewhat meaningless in the context of detecting the presence of clouds or no clouds in the images.
+
 We can now split the data using the methods outlined above and run a "classifier" which just sets all points to label $-1$, indicating cloudlessness. For the block splitting method, we split each image into 64 blocks, for a total of 192 blocks, of which 30 are for testing, 30 are for validation, and 132 are for training. This method gives a validation set misclassification rate of $63.0\%$ and a test set misclassification rate of $65.3\%$, which is about in line with the overall rate of $-1$ labels being $35-36\%$. This classifier would yield high accuracy if the image data was unbalanced to be mostly cloudless images, but in a scenario where the majority of points are not labeled $-1$, it is not a particularly accurate classifier.
+
+```{r binary-data-all}
+X_cv <- data %>%
+  filter(Label != 0) %>%
+  mutate(Label = ifelse(
+    Label == -1,
+    0, Label
+  ))
+y_cv <- X_cv %>% pull(Label)
+y_cv <- as.factor(y_cv)
+
+#binary_pct <- X_cv %>%
+#              count(Label) %>%
+#              summarise(pct = 100*n/nrow(X_cv))
+#rownames(binary_pct) <- c("Not Cloud", "Cloud")
+#colnames(binary_pct) <- c("% of pixels")
+#binary_pct %>%
+#  kable(digits = 3,
+#        caption = "Cloud vs Not Cloud Binary Percentages") %>%
+#  kable_styling(latex_options = "HOLD_position", full_width = F)
+```
 
 ```{r block-split-baseline}
 set.seed(521)
@@ -379,34 +403,52 @@ invisible(mean(block_test_labels != -1))
 
 ```
 
-Next, we will run this trivial classifier on our image splitting method where we split image 2 in half for the validation and test sets. This method gives a validation set misclassification rate of $61.4\%$ and a test set misclassification rate of $65.9\%$, which is about in line with the overall rate of $-1$ labels being $38.6\%$ and $34.1\%$ respectively. Once again, this trivial classifier will have a high average accuracy if the majority of the points are $-1$ (cloudless). But since the majority of the points are not cloudless, this trivial classsifier will be very inaccurate.
+Next, we will run this trivial classifier on our image splitting method where we split image 2 in half for the validation and test sets. This method gives a validation set misclassification rate of $21.1\%$ and a test set misclassification rate of $36.4\%$, which is about in line with the overall rate of $-1$ labels being $78.9\%$ and $63.6\%$ respectively. Once again, this trivial classifier will have a high average accuracy if the majority of the points are $-1$ (cloudless). Since the majority of the points are cloudless in the validation and test sets, this trivial classifier appears to be fairly accurate even though it is just predicting the majority class each time.
 
 ```{r baseline-image-split}
-val_labels <- split_ims$val$Label
-val_trivial <- rep(-1, length(val_labels))
-#print(sum(val_labels == -1)/length(val_labels))
+binary_image_split <- image_split(X_cv, y_cv, K = 8)
+
+val_labels <- binary_image_split$val_labels
+val_trivial <- rep(0, length(val_labels))
+#print(sum(val_labels == 0)/length(val_labels))
 #print(sum(val_trivial != val_labels)/length(val_trivial))
 
-test_labels <- split_ims$test$Label
-test_trivial <- rep(-1, length(test_labels))
-#print(sum(test_labels == -1)/length(test_labels))
+test_labels <- binary_image_split$test_labels
+test_trivial <- rep(0, length(test_labels))
+#print(sum(test_labels == 0)/length(test_labels))
 #print(sum(test_trivial != test_labels)/length(test_trivial))
 ```
 
 ## First Order Importance
 
+```{r corrplot-binary}
+corrplot::corrplot(cor(X_cv[, 4:12]), type="upper", tl.col="black")
+```
+
 In general, the best set of features should include features that are strongly correlated with the response, in this case label, and features that are weakly correlated with each other. Looking at the correlation plot in the exploratory data analysis section, NDAI and CORR are fairly strongly correlated with label and are fairly weakly correlated with each other. Although SD is weakly correlated with CORR which would make it a good feature to include with CORR, it may not be preferable because it is strongly correlated with NDAI and weakly correlated with label. Looking at the scatter plots of the 3 combinations of these 3 variables below, we see that the -1 and 1 labels corresponding to the non-cloud and cloud labels are more easily separated with NDAI and CORR or with log(SD) and CORR. Therefore, we believe that NDAI and CORR are the best 2 features to select out of the 3 constructed physical features because they are both strongly correlated with the response label, are fairly weakly correlated with each other, and lead to more separable groups of labels.
 
 ```{r scatter-compare}
-scatter1 <- ggplot(data, aes(x=NDAI, y=log(SD), color=factor(Label))) +
-  geom_point(alpha=0.5) +
+scatter1 <- ggplot() +
+  geom_point(aes(x=X_cv$NDAI, y=log(X_cv$SD), color=y_cv),
+             alpha=0.5) +
+  labs(x="NDAI", y="log SD") +
+  scale_color_manual(labels = c("Not Cloud", "Cloud"),
+                     values = c("chocolate3", "deepskyblue")) +
   theme(legend.position = "none")
-scatter2 <- ggplot(data, aes(x=NDAI, y=CORR, color=factor(Label))) +
-  geom_point(alpha=0.5) +
+scatter2 <- ggplot() +
+  geom_point(aes(x=X_cv$NDAI, y=X_cv$CORR, color=y_cv),
+             alpha=0.5) +
+  labs(x="NDAI", y="CORR") +
+  scale_color_manual(labels = c("Not Cloud", "Cloud"),
+                     values = c("chocolate3", "deepskyblue")) +
   theme(legend.position = "none")
-scatter3 <- ggplot(data, aes(x=log(SD), y=CORR, color=factor(Label))) +
-  geom_point(alpha=0.5) +
-  labs(color="Label")
+scatter3 <- ggplot() +
+  geom_point(aes(x=log(X_cv$SD), y=X_cv$CORR, color=y_cv),
+             alpha=0.5) +
+  labs(x="log SD", y="CORR",
+       color="Label") +
+  scale_color_manual(labels = c("Not Cloud", "Cloud"),
+                     values = c("chocolate3", "deepskyblue"))
 
 grid.arrange(scatter1, scatter2, scatter3,
              nrow=1, ncol=3, widths=c(1, 1, 1.5))
@@ -414,63 +456,47 @@ grid.arrange(scatter1, scatter2, scatter3,
 
 Now looking at the radiance angles, the most promising features include BF, AF, and AN because they are all fairly highly correlated with label. Although the correlation of BF with label is slightly weaker, it has a weaker correlation with CORR which may make it a better feature to combine with NDAI and CORR.
 
-Below is a table of the mutual information between each feature and the response label. The entropy of the empirical probability distributions are computed to quantify the amount of information obtained about label when observing one of the features. NDAI is certainly a good feature to select because it has the highest mutual information with label by a large margin. Although SD has a higher mutual information than CORR, since it is highly correlated with NDAI and CORR still has a high mutual information, we prefer to choose CORR alongside NDAI. As expected, the BF, AF, and AN radiance angles have a higher mutual information with label than the DF and CF radiance angles. Since the AF and AN radiance angles only have a slightly higher mutual information than the BF radiance angle, we may prefer to choose the BF radiance angle because it has a weaker correlation with CORR compared to the AF and AN radiance angles. The next table shows the table of the mutual information between the combination of NDAI and CORR with BF, AF, and AN respectively to see which combination of the 3 variables results in the greatest mutual information. The combination with BF results in the highest mutual information. This further justifies combining the BF radiance angle with NDAI and CORR because not only is it most weakly correlated with CORR, but it also gives the highest mutual information when in combination with NDAI and CORR.
-
-Therefore, we have chosen the 3 best features to be NDAI, CORR, and the BF radiance angle because they are all fairly strongly correlated with the response label, they are only moderately correlated with each other, and they all have a relatively high mutual information with the response label.
-
-```{r mutual-information}
+```{r mutual-information, message=FALSE}
 library(infotheo)
 mutual_info <- function(feature) {
-  mutinformation(data$Label, discretize(feature))
+  mutinformation(y_cv, discretize(feature))
 }
 
-mi_table <- apply(data[, 5:ncol(data)], MARGIN=2, FUN=mutual_info)
+mi_table <- apply(X_cv[, 5:ncol(data)], MARGIN=2, FUN=mutual_info)
+mi_table <- data.frame(t(mi_table))
+rownames(mi_table) <- "Entropy"
 mi_table %>%
-  kable(digits=3, col.names=c("Entropy"),
+  kable(digits=3,
         caption="Mutual Information with Label") %>%
   kable_styling(latex_options="HOLD_position", full_width=F)
 ```
 
+Above is a table of the mutual information between each feature and the response label. The entropy of the empirical probability distributions are computed to quantify the amount of information obtained about label when observing one of the features. NDAI is certainly a good feature to select because it has the highest mutual information with label by a large margin. Although SD has a higher mutual information than CORR, since it is highly correlated with NDAI and CORR still has a high mutual information, we prefer to choose CORR alongside NDAI. As expected, the BF, AF, and AN radiance angles have a higher mutual information with label than the DF and CF radiance angles. Since the AF and AN radiance angles only have a slightly higher mutual information than the BF radiance angle, we may prefer to choose the BF radiance angle because it has a weaker correlation with CORR compared to the AF and AN radiance angles. The next table shows the table of the mutual information between the combination of NDAI and CORR with BF, AF, and AN respectively to see which combination of the 3 variables results in the greatest mutual information. The combination with BF results in the highest mutual information. This further justifies combining the BF radiance angle with NDAI and CORR because not only is it most weakly correlated with CORR, but it also gives the highest mutual information when in combination with NDAI and CORR.
+
+Therefore, we have chosen the 3 best features to be NDAI, CORR, and the BF radiance angle because they are all fairly strongly correlated with the response label, they are only moderately correlated with each other, and they all have a relatively high mutual information with the response label.
+
 ```{r mutual-information-2}
-mi_bf <- mutinformation(data$Label, discretize(data[, c("NDAI", "CORR", "BF")]))
-mi_af <- mutinformation(data$Label, discretize(data[, c("NDAI", "CORR", "AF")]))
-mi_an <- mutinformation(data$Label, discretize(data[, c("NDAI", "CORR", "AN")]))
+mi_bf <- mutinformation(y_cv, discretize(X_cv[, c("NDAI", "CORR", "BF")]))
+mi_af <- mutinformation(y_cv, discretize(X_cv[, c("NDAI", "CORR", "AF")]))
+mi_an <- mutinformation(y_cv, discretize(X_cv[, c("NDAI", "CORR", "AN")]))
 
 mi_table2 <- data.frame(c(mi_bf, mi_af, mi_an))
-names(mi_table2) <- "Entropy"
-rownames(mi_table2) <- c("NDAI, CORR, BF", "NDAI, CORR, AF", "NDAI, CORR, AN")
+mi_table2 <- data.frame(t(mi_table2))
+rownames(mi_table2) <- "Entropy"
+colnames(mi_table2) <- c("NDAI, CORR, BF", "NDAI, CORR, AF", "NDAI, CORR, AN")
 mi_table2 %>%
-  kable(digits=3, col.names=c("Entropy"),
+  kable(digits=3,
         caption="Mutual Information with Label") %>%
   kable_styling(latex_options="HOLD_position", full_width=F)
 ```
 
 ## Generic Cross-Validation
 
-We then wrote a function that allows us to pass in the name of a trivial classifier (or a function call to such a classifier), and a number of folds, and outputs the $k$-fold Cross-validation misclassification rate on the training data provided using the classifier. The function uses the block splitting method described in Section 2(a), with $k^2$ blocks per image. It then partitions the blocks into $k$ groups, and, for each partitions, treats that partition as a test set while training the classifier on the other $k-1$ partitions. Finally, the function returns the mean of the misclassification rates of the classifiers predicting on each of the $k$ test partitions. The function also allows for optional arguments, which are then passed to the generic classifier, so as to allow for classifiers to be modified from their generic versions.
+We then wrote a function that allows us to pass in the name of a trivial classifier (or a function call to such a classifier), and a number of folds, and outputs the $k$-fold Cross-validation misclassification rate on the training data provided using the classifier. The function uses the block splitting method described in Section 2(a), with $k^2$ blocks per image. It then partitions the blocks into $k$ groups, and, for each partition, treats that partition as a test set while training the classifier on the other $k-1$ partitions. Finally, the function returns the mean of the misclassification rates of the classifiers predicting on each of the $k$ test partitions. The function also allows for optional arguments, which are then passed to the generic classifier, so as to allow for classifiers to be modified from their generic versions.
+
+The function also allows for the image splitting method described in Section 2(a). Taking images 1 and 3 from the training set and half of image 2 from the validation set, it splits these 2.5 images into K blocks which become the K folds used to train and validate the model in the function. The other half of image 2 is set aside as the test set so that after cross validation, the classifier is trained on the whole training set and the validation set before predicting and evaluating the performance on the test set.
 
 # Modeling
-
-```{r binary-data-all}
-X_cv <- data %>%
-  filter(Label != 0) %>%
-  mutate(Label = ifelse(
-    Label == -1,
-    0, Label
-  ))
-y_cv <- X_cv %>% pull(Label)
-y_cv <- as.factor(y_cv)
-
-binary_pct <- X_cv %>%
-              count(Label) %>%
-              summarise(pct = 100*n/nrow(X_cv))
-rownames(binary_pct) <- c("Not Cloud", "Cloud")
-colnames(binary_pct) <- c("% of pixels")
-binary_pct %>%
-  kable(digits = 3,
-        caption = "Cloud vs Not Cloud Binary Percentages") %>%
-  kable_styling(latex_options = "HOLD_position", full_width = F)
-```
 
 ```{r image-split-CVs, message=FALSE}
 source("CVmaster.R")
@@ -587,66 +613,6 @@ ggplot() +
   labs(title = "Block Split Test ROC",
        x = "1 - Specificity", y = "Sensitivity",
        color = "ROC curves")
-```
-
-## Logistic Regression Threshold Tuning
-
-```{r lr-thresh-comp-image, message=FALSE}
-cv_lr_3 <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
-                  K = 8, split = "image", type = "response",
-                  thresh=0.3, family="binomial")
-cv_lr_35 <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
-                  K = 8, split = "image", type = "response",
-                  thresh=0.35, family="binomial")
-cv_lr_4 <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
-                  K = 8, split = "image", type = "response",
-                  thresh=0.4, family="binomial")
-cv_lr_45 <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
-                  K = 8, split = "image", type = "response",
-                  thresh=0.45, family="binomial")
-cv_lr_5 <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
-                  K = 8, split = "image", type = "response",
-                  thresh=0.5, family="binomial")
-
-lr_thresh_comp <- cbind(cv_lr_3$CV_loss, cv_lr_35$CV_loss,
-                        cv_lr_4$CV_loss, cv_lr_45$CV_loss,
-                        cv_lr_5$CV_loss)
-colnames(lr_thresh_comp) <- c("Thresh = 0.3", "Thresh = 0.35",
-                              "Thresh = 0.4", "Thresh = 0.45",
-                              "Thresh = 0.5")
-lr_thresh_comp %>%
-  kable(digits = 3,
-        caption = "LR Threshold Comparison Image Split") %>%
-  kable_styling(latex_options = "HOLD_position", full_width = F)
-```
-
-```{r lr-thresh-comp-block, message=FALSE}
-cv_lr_3_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
-                  K = 8, split = "block", type = "response",
-                  thresh=0.3, family="binomial")
-cv_lr_35_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
-                  K = 8, split = "block", type = "response",
-                  thresh=0.35, family="binomial")
-cv_lr_4_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
-                  K = 8, split = "block", type = "response",
-                  thresh=0.4, family="binomial")
-cv_lr_45_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
-                  K = 8, split = "block", type = "response",
-                  thresh=0.45, family="binomial")
-cv_lr_5_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
-                  K = 8, split = "block", type = "response",
-                  thresh=0.5, family="binomial")
-
-lr_thresh_comp_b <- cbind(cv_lr_3_b$CV_loss, cv_lr_35_b$CV_loss,
-                        cv_lr_4_b$CV_loss, cv_lr_45_b$CV_loss,
-                        cv_lr_5_b$CV_loss)
-colnames(lr_thresh_comp_b) <- c("Thresh = 0.3", "Thresh = 0.35",
-                              "Thresh = 0.4", "Thresh = 0.45",
-                              "Thresh = 0.5")
-lr_thresh_comp_b %>%
-  kable(digits = 3,
-        caption = "LR Threshold Comparison Block Split") %>%
-  kable_styling(latex_options = "HOLD_position", full_width = F)
 ```
 
 # Diagnostics
