@@ -413,7 +413,7 @@ invisible(mean(block_test_labels == 1))
 
 ```
 
-Next, we will run this trivial classifier on our image splitting method where we split image 2 in half for the validation and test sets. This method gives a validation set misclassification rate of $42.0\%$ and a test set misclassification rate of $42.0\%$, which is about in line with the overall rate of $-1$ labels being $\approx 58\%$ in the binary dataset (with unclassified points removed). Once again, this trivial classifier will have a high average accuracy if the majority of the points are $-1$ (cloudless). Since the majority of the points are cloudless in the validation and test sets, this trivial classifier appears to be fairly accurate even though it is just predicting the majority class each time.
+Next, we will run this trivial classifier on our image splitting method where we split image 2 in half for the validation and test sets. This method gives a validation set misclassification rate of $21.1\%$ and a test set misclassification rate of $36.4\%$, which is about in line with the overall rate of $-1$ labels being $78.9\%$ and $63.6\%$ respectively in the binary dataset (with unclassified points removed). Once again, this trivial classifier will have a high average accuracy if the majority of the points are $-1$ (cloudless). Since the majority of the points are cloudless in the validation and test sets, this trivial classifier appears to be fairly accurate even though it is just predicting the majority class each time.
 
 ```{r baseline-image-split}
 binary_image_split <- image_split(X_cv, y_cv, K = 8)
@@ -460,7 +460,7 @@ scatter3 <- ggplot() +
   scale_color_manual(labels = c("Not Cloud", "Cloud"),
                      values = c("chocolate3", "deepskyblue"))
 
-bin_leg = get_legend(scatter3)
+bin_leg = ggpubr::get_legend(scatter3)
 
 scatter3 = scatter3 +
   theme(legend.position="none")
