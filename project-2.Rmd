@@ -32,6 +32,7 @@ library(randomForest)
 library(naivebayes)
 library(pROC)
 library(gbm)
+library(rlist)
 
 source("CVmaster.R")
 source("image_split.R")
@@ -450,17 +451,6 @@ We then wrote a function that allows us to pass in the name of a trivial classif
 
 # Modeling
 
-```{r}
-#Eli's Test Code
-
-#source("CVmaster.R")
-
-#tl = c(block_train_labels, block_valid_labels)
-#td = rbind(block_train, block_valid)
-
-#CVmaster(td, tl, "qda", K = 8, split = "done", type = "class")
-```
-
 ```{r binary-data-all}
 X_cv <- data %>%
   filter(Label != 0) %>%
@@ -513,7 +503,7 @@ model_comp %>%
   kable_styling(latex_options = "HOLD_position", full_width = F)
 ```
 
-```{r block-ROC-comparison}
+```{r image-ROC-comparison}
 ggplot() +
   geom_line(aes(x = 1 - cv_lr$roc_obj$specificities,
                 y = cv_lr$roc_obj$sensitivities,
@@ -662,6 +652,88 @@ lr_thresh_comp_b %>%
 # Diagnostics
 
 ## Diagnostics of AdaBoost
+
+Of the different classifiers we considered, one of the best performing ones was Generalized Boosted Models, specifically using AdaBoost exponential loss on binary outcome, where 0 indicated cloudlessness and 1 indicated clouds. In boosting models, there are 2 main hyperparameters to we are focused on estimating: the number of trees in the boosting model, and a shrinkage parameter applied to each tree. To determine the optimal parameters, we can fit a cross-validated model at different values of the hyperparameters and record the average misclassification error, as well as calculating the error on a test set with a model trained on the entire training set.
+
+```{r hyperest-ntree-lr, eval=FALSE}
+ntrees_orig = c(10, 25, 50, 75, 100, 125, 150, 200, 250, 300)
+lr_orig = c(0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25)
+
+outs = list()
+outs_b = list()
+
+for (t in ntrees_orig) {
+  for (l in lr_orig) {
+    mod = CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
+                    K = 8, split = "image", type = "response",
+                    distribution = "adaboost", bag.fraction = 1, n.trees = t,
+                    shrinkage = l)
+    mod_b = CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
+                    K = 8, split = "block", type = "response",
+                    distribution = "adaboost", bag.fraction = 1, n.trees = t,
+                    shrinkage = l)
+    outs = list.append(outs, mod$CV_loss)
+    outs_b = list.append(outs_b, mod_b$CV_loss)
+  }
+}
+
+outs = plyr::ldply(outs, data.frame)
+outs_b = plyr::ldply(outs_b, data.frame)
+
+
+folds = rep(c("F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "A", "T"), 
+            length(ntrees_orig)*length(lr_orig))
+ntrees = rep(ntrees_orig, each = 10*length(lr_orig))
+lr = rep(rep(lr_orig, each = 10), length(ntrees_orig))
+
+n_df = cbind(ntrees, lr, folds, outs_b, outs)
+
+colnames(n_df) = c("ntrees", "lr", "folds", "block", "image")
+
+write_csv(n_df, "parameter_estimation2.csv")
+```
+
+```{r}
+n_df = read_csv("parameter_estimation.csv")
+
+ng1 = n_df %>%
+  mutate(lr = as.factor(lr)) %>%
+  filter(folds %in% c("A", "T")) %>%
+  ggplot() +
+  geom_line(data = . %>% filter (folds == "T"), aes(x = ntrees, y = block, 
+                                                    group = lr,
+                                                    color = lr),
+            linewidth = 1) +
+  labs(title = "Block Split Average CV Misclassification Error", 
+       subtitle = "AdaBoost Parameter Estimation",
+       x = "Number of Trees Fit",
+       y = "Misclassification Error",
+       color = "Learning Rate") +
+  theme(legend.position = "None")
+
+ng2 = n_df %>%
+  mutate(lr = as.factor(lr)) %>%
+  filter(folds %in% c("A", "T")) %>%
+  ggplot() +
+  geom_line(data = . %>% filter (folds == "T"), aes(x = ntrees, y = image,
+                                                    group = lr,
+                                                    color = lr),
+            linewidth = 1) +
+  labs(title = "Image Split Average CV Misclassification Error", 
+       subtitle = "AdaBoost Parameter Estimation",
+       x = "Number of Trees Fit",
+       y = "Misclassification Error",
+       color = "Learning Rate")
+
+grid.arrange(ng1,ng2,nrow=1)
+
+ng1
+
+ng2
+```
+In total, 54 pairings of the two hyperparameters were trained on both split methods, with 9 distinct values for the number of trees and 6 distinct learning rate choices.
+
+
 
 ## Comparing Misclassification Errors
 
