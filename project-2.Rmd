@@ -656,10 +656,9 @@ lr_thresh_comp_b %>%
 Of the different classifiers we considered, one of the best performing ones was Generalized Boosted Models, specifically using AdaBoost exponential loss on binary outcome, where 0 indicated cloudlessness and 1 indicated clouds. In boosting models, there are 2 main hyperparameters to we are focused on estimating: the number of trees in the boosting model, and a shrinkage parameter applied to each tree. To determine the optimal parameters, we can fit a cross-validated model at different values of the hyperparameters and record the average misclassification error, as well as calculating the error on a test set with a model trained on the entire training set.
 
 ```{r hyperest-ntree-lr, eval=FALSE, message=FALSE}
-#ntrees_orig = c(1, 5, 10, 20, 25, 40, 50, 60, 75, 80, 100, 
-#                 120, 125, 140, 150, 160, 175, 180, 200, 
-#                 225, 250, 275, 300)
-ntrees_orig = c(5, 20, 40, 60, 80, 120, 140, 160, 175, 180, 275)
+ntrees_orig = c(1, 5, 10, 20, 25, 40, 50, 60, 75, 80, 100, 
+                 120, 125, 140, 150, 160, 175, 180, 200, 
+                 225, 250, 275, 300)
 lr_orig = c(0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75)
 
 outs = list()
@@ -696,9 +695,7 @@ n_df = cbind(ntrees, lr, folds, outs_b, outs)
 
 colnames(n_df) = c("ntrees", "lr", "folds", "block", "image")
 
-write_csv(n_df, "parameter_estimation3.csv")
-
-write_csv(n_df, "parameter_estimation.csv", append=TRUE)
+write_csv(n_df, "parameter_estimation.csv")
 ```
 
 ```{r param_estim_plot}
@@ -738,9 +735,12 @@ grid.arrange(ng1,ng2,nrow=1)
 ng1
 
 ng2
-```
-In total, 108 pairings of the two hyperparameters were trained on both split methods, with 12 distinct values for the number of trees and 9 distinct learning rate choices. In the block split method, there was minimal difference between the different learning rates with higher numbers of trees, but the ideal parameter pairs appear to be either 125 trees with a learning rate of 0.05 or 225 trees with a learning rate of 0.025. For image split, higher trees meant significantly better performance with both the 0.01 and 0.025 learning rates, so the best parameter pairs are 200 or more trees with either of those learning rates, which showed minimal separation
 
+n_df %>%
+  filter(folds == "A") %>%
+  filter(block == min(block))
+```
+In total, 207 pairings of the two hyperparameters were trained on both split methods, with 23 distinct values for the number of trees and 9 distinct learning rate choices. In the block split method, there was minimal difference between the different learning rates with higher numbers of trees. At lower numbers of trees, however, the parameter pair with the lowest average cross-validated loss was 10 trees with a learning rate of 0.25. For image split, higher trees meant significantly better performance with both the 0.01 and 0.025 learning rates, compared to the other learning rates. However, the best parameter pair by average cross-validated loss was 50 trees with learning rate of 0.075.
 
 ## Comparing Misclassification Errors
 
