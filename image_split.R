@@ -14,13 +14,22 @@ image_split <- function(data, labels, K) {
       data$label <- labels
       val_test <- data %>%
         filter(image == 2)
-      n <- nrow(val_test)
-      half_i <- floor(nrow(val_test)/2)
       
-      test <- val_test[1:half_i, -ncol(val_test)]
-      test_labels <- val_test[1:half_i, ncol(val_test)]
-      val <- val_test[(half_i+1):n, -ncol(val_test)]
-      val_labels <- val_test[(half_i+1):n, ncol(val_test)]
+      x_range = val_test %>%
+        arrange(X) %>%
+        pull(X) %>%
+        unique()
+      half_i = floor(length(x_range)/2)
+      
+      test = val_test %>%
+        filter((image == im) & (X %in% x_range[1:half_i]))
+      test_labels = test[, ncol(test)]
+      test = test[, -ncol(test)]
+      
+      val = val_test %>%
+        filter((image == im) & (X %in% x_range[(half_i+1):length(x_range)]))
+      val_labels = val[, ncol(val)]
+      val = val[, -ncol(val)]
       
       xvals = val %>%
         filter(image == im) %>%
@@ -32,7 +41,7 @@ image_split <- function(data, labels, K) {
         unique()
       if (val_blocks > 1) {
         ysplit = split(yvals,
-                       cut(yvals,
+                       cut(seq_along(yvals),
                            val_blocks,
                            labels = FALSE))
       }
@@ -51,7 +60,7 @@ image_split <- function(data, labels, K) {
         pull(Y) %>%
         unique()
       ysplit = split(yvals,
-                     cut(yvals,
+                     cut(seq_along(yvals),
                          train_blocks,
                          labels = FALSE))
     }
