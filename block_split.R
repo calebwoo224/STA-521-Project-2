@@ -17,12 +17,12 @@ block_split = function(training_data, training_labels, K, seed) {
       pull(Y) %>%
       unique()
     
-    xsplit = split(xvals,
+    xsplit = split(sort(xvals),
                    cut(seq_along(xvals),
                        K,
                        labels = FALSE))
     
-    ysplit = split(yvals,
+    ysplit = split(sort(yvals),
                    cut(seq_along(yvals),
                        K,
                        labels = FALSE))
