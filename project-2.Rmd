@@ -881,14 +881,6 @@ ng2 = ng2 +
   theme(legend.position = "none")
 
 grid.arrange(ng1,ng2, ng_leg ,nrow=1, widths = c(1,1,.5))
-
-n_df %>%
-  filter(folds == "A") %>%
-  filter(block == min(block))
-
-n_df %>%
-  filter(folds == "A") %>%
-  filter(image == min(image))
 ```
 In total, 250 pairings of the two hyperparameters were trained on both split methods, with 25 distinct values for the number of trees and 10 distinct learning rate choices. In the block split method, at higher numbers of trees, the best performing learning rate is 0.01 with around 275 trees. For image split, higher trees meant significantly better performance with the 0.01 learning rate, compared to the other learning rates. However, the best parameter pair, for both split methods, by average cross-validated loss was 50 trees with learning rate of 0.075.
 
@@ -965,7 +957,11 @@ cmB$table %>%
 
 ## Finding a Better Classifier
 
+Looking at the results from part 4(a), AdaBoost appears to be one of the stronger classifiers for predicting cloudless pixels, but a better classifier would have a negative predictive value closer to the positive predictive value of the model (for the image split the NPV was $19\%$ lower, and for the block split the NPV was $8\%$ lower). A better classifier, either similar to AdaBoost with a different loss function, such as "huberized loss", might be more effective at handling this. Conversely, a classifier like soft-margin SVM might be a better classifier on this dataset, given it might be more robust to predicting future data correctly and predicting unlabeled points in the current dataset, but training SVM was computationally prohibitive for this analysis.
+
 ## Comparing Split Methods
+
+When looking at the results from the hyperparameter optimization on the AdaBoost model, the differences in the two split methods are immediately evident. In every iteration with more than 100 trees, with every learning rate, the image split method returned a misclassification error approximately 15%-20% lower than the misclassification error from the block split method. This was true for every model we attempted in part 3 as well. One possible explanation for this is that splitting the data into 64 blocks per image as opposed to 2-3 per image creates more violations of the spatial structure of the data, since each block has 4 edges so there are more points that are not connected to every point they are spatially adjacent to.
 
 ## Conclusion
 
