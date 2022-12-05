@@ -413,7 +413,7 @@ invisible(mean(block_test_labels == 1))
 
 ```
 
-Next, we will run this trivial classifier on our image splitting method where we split image 2 in half for the validation and test sets. This method gives a validation set misclassification rate of $42.0\%$ and a test set misclassification rate of $42.0\%$, which is about in line with the overall rate of $-1$ labels being $\approx 58\%$ in the binary dataset (with unclassified points removed). Once again, this trivial classifier will have a high average accuracy if the majority of the points are $-1$ (cloudless). Since the majority of the points are cloudless in the validation and test sets, this trivial classifier appears to be fairly accurate even though it is just predicting the majority class each time.
+Next, we will run this trivial classifier on our image splitting method where we split image 2 in half for the validation and test sets. This method gives a validation set misclassification rate of $21.1\%$ and a test set misclassification rate of $36.4\%$, which is about in line with the overall rate of $-1$ labels being $78.9\%$ and $63.6\%$ respectively in the binary dataset (with unclassified points removed). Once again, this trivial classifier will have a high average accuracy if the majority of the points are $-1$ (cloudless). Since the majority of the points are cloudless in the validation and test sets, this trivial classifier appears to be fairly accurate even though it is just predicting the majority class each time.
 
 ```{r baseline-image-split}
 binary_image_split <- image_split(X_cv, y_cv, K = 8)
@@ -460,7 +460,7 @@ scatter3 <- ggplot() +
   scale_color_manual(labels = c("Not Cloud", "Cloud"),
                      values = c("chocolate3", "deepskyblue"))
 
-bin_leg = get_legend(scatter3)
+bin_leg = ggpubr::get_legend(scatter3)
 
 scatter3 = scatter3 +
   theme(legend.position="none")
@@ -517,7 +517,7 @@ The function also allows for the image splitting method described in Section 2(a
 source("CVmaster.R")
 cv_lr <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
                   K = 8, split = "image", type = "response",
-                  thresh=0.4, family="binomial")
+                  family="binomial")
 cv_lda <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "lda",
                    K = 8, split = "image", type = "class")
 cv_qda <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "qda",
@@ -565,33 +565,92 @@ model_comp %>%
   kable_styling(latex_options = "HOLD_position", full_width = F)
 ```
 
+```{r image-ROC-cutoffs}
+lr_index <- which.max(cv_lr$roc_obj$specificities + cv_lr$roc_obj$sensitivities)
+lda_index <- which.max(cv_lda$roc_obj$specificities + cv_lda$roc_obj$sensitivities)
+qda_index <- which.max(cv_qda$roc_obj$specificities + cv_qda$roc_obj$sensitivities)
+tree_index <- which.max(cv_tree$roc_obj$specificities + cv_tree$roc_obj$sensitivities)
+rf_index <- which.max(cv_rf$roc_obj$specificities + cv_rf$roc_obj$sensitivities)
+gbm_index <- which.max(cv_gbm$roc_obj$specificities + cv_gbm$roc_obj$sensitivities)
+```
+
 ```{r image-ROC-comparison}
 ggplot() +
+  # lr ROC
   geom_line(aes(x = 1 - cv_lr$roc_obj$specificities,
                 y = cv_lr$roc_obj$sensitivities,
-                color = paste0("LR AUC = ", round(cv_lr$roc_obj$auc, 3)))) +
+                color = "lr")) +
+  # lr cutoff
+  geom_point(aes(x = 1 - cv_lr$roc_obj$specificities[lr_index],
+                 y = cv_lr$roc_obj$sensitivities[lr_index],
+                 color = "cutoff"),
+             shape = 8) +
+  # lda ROC
   geom_line(aes(x = 1 - cv_lda$roc_obj$specificities,
                 y = cv_lda$roc_obj$sensitivities,
-                color = paste0("LDA AUC = ", round(cv_lda$roc_obj$auc, 3)))) +
+                color = "lda")) +
+  # lda cutoff
+  geom_point(aes(x = 1 - cv_lda$roc_obj$specificities[lda_index],
+                 y = cv_lda$roc_obj$sensitivities[lda_index],
+                 color = "cutoff"),
+             shape = 8) +
+  # qda ROC
   geom_line(aes(x = 1 - cv_qda$roc_obj$specificities,
                 y = cv_qda$roc_obj$sensitivities,
-                color = paste0("QDA AUC = ", round(cv_qda$roc_obj$auc, 3)))) +
+                color = "qda")) +
+  # qda cutoff
+  geom_point(aes(x = 1 - cv_qda$roc_obj$specificities[qda_index],
+                 y = cv_qda$roc_obj$sensitivities[qda_index],
+                 color = "cutoff"),
+             shape = 8) +
+  # tree ROC
   geom_line(aes(x = 1 - cv_tree$roc_obj$specificities,
                 y = cv_tree$roc_obj$sensitivities,
-                color = paste0("Tree AUC = ", round(cv_tree$roc_obj$auc, 3)))) +
+                color = "tree")) +
+  # tree cutoff
+  geom_point(aes(x = 1 - cv_tree$roc_obj$specificities[tree_index],
+                 y = cv_tree$roc_obj$sensitivities[tree_index],
+                 color = "cutoff"),
+             shape = 8) +
+  # rf ROC
   geom_line(aes(x = 1 - cv_rf$roc_obj$specificities,
                 y = cv_rf$roc_obj$sensitivities,
-                color = paste0("RF AUC = ", round(cv_rf$roc_obj$auc, 3)))) +
+                color = "rf")) +
+  # rf cutoff
+  geom_point(aes(x = 1 - cv_rf$roc_obj$specificities[rf_index],
+                 y = cv_rf$roc_obj$sensitivities[rf_index],
+                 color = "cutoff"),
+             shape = 8) +
+  # gbm ROC
   geom_line(aes(x = 1 - cv_gbm$roc_obj$specificities,
                 y = cv_gbm$roc_obj$sensitivities,
-                color = paste0("GBM AUC = ", round(cv_gbm$roc_obj$auc, 3)))) +
+                color = "gbm")) +
+  # gbm cutoff
+  geom_point(aes(x = 1 - cv_gbm$roc_obj$specificities[gbm_index],
+                 y = cv_gbm$roc_obj$sensitivities[gbm_index],
+                 color = "cutoff"),
+             shape = 8) +
   labs(title = "Image Split Test ROC",
        x = "1 - Specificity", y = "Sensitivity",
-       color = "ROC curves")
+       color = "ROC curves") +
+  scale_color_manual(labels = c("Cutoffs",
+                                paste0("GBM AUC = ", round(cv_gbm$roc_obj$auc, 3)),
+                                paste0("LDA AUC = ", round(cv_lda$roc_obj$auc, 3)),
+                                paste0("LR AUC = ", round(cv_lr$roc_obj$auc, 3)),
+                                paste0("QDA AUC = ", round(cv_qda$roc_obj$auc, 3)),
+                                paste0("RF AUC = ", round(cv_rf$roc_obj$auc, 3)),
+                                paste0("Tree AUC = ", round(cv_tree$roc_obj$auc, 3))),
+                     values = c("black",
+                                "red",
+                                "orange",
+                                "yellow",
+                                "green",
+                                "blue",
+                                "purple"))
 ```
 
 ```{r block-split-baseline}
-bsplit = block_split(X_cv, y_cv, K=8)
+bsplit = block_split(X_cv, y_cv, K=8, seed=521)
 btraining_data = bsplit$training_data
 blabels = bsplit$labels
 bsnum = bsplit$snum
@@ -599,8 +658,8 @@ btraining_labels = bsplit$training_data %>% pull(Label)
 
 #Splitting the blocks
 bbks = seq.int(from = 1, to = bsnum, by = 1)
-bbks = sample(bks)
-btnum = floor(length(bks)/6) #Set ~1/6 for testing
+bbks = sample(bbks)
+btnum = floor(length(bbks)/6) #Set ~1/6 for testing
 btest_data = btraining_data %>%
   filter(block %in% bbks[((length(bbks)-btnum)+1):length(bbks)])
 btest_labels = btraining_labels[(blabels %in% 
@@ -616,11 +675,11 @@ block_split_baseline <- c()
 for (f in folds) {
   y = btraining_labels[blabels %in% f]
   freq <- mean(y != 0)
-  image_split_baseline <- c(image_split_baseline, freq)
+  block_split_baseline <- c(block_split_baseline, freq)
 }
 block_split_baseline <- c(block_split_baseline,
                           mean(block_split_baseline))
-block_split_baseline <- c(image_split_baseline,
+block_split_baseline <- c(block_split_baseline,
                           sum(btest_labels != 0)/
                             length(btest_labels))
 ```
@@ -628,7 +687,7 @@ block_split_baseline <- c(image_split_baseline,
 ```{r block-split-CVs, message=FALSE}
 cv_lr_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
                   K = 8, split = "block", type = "response",
-                  thresh=0.4, family="binomial")
+                  family="binomial")
 cv_lda_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "lda",
                   K = 8, split = "block", type = "class")
 cv_qda_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "qda",
@@ -654,30 +713,91 @@ model_comp_b %>%
   kable_styling(latex_options = "HOLD_position", full_width = F)
 ```
 
+```{r block-ROC-cutoffs}
+lr_b_index <- which.max(cv_lr_b$roc_obj$specificities + cv_lr_b$roc_obj$sensitivities)
+lda_b_index <- which.max(cv_lda_b$roc_obj$specificities + cv_lda_b$roc_obj$sensitivities)
+qda_b_index <- which.max(cv_qda_b$roc_obj$specificities + cv_qda_b$roc_obj$sensitivities)
+tree_b_index <- which.max(cv_tree_b$roc_obj$specificities + cv_tree_b$roc_obj$sensitivities)
+rf_b_index <- which.max(cv_rf_b$roc_obj$specificities + cv_rf_b$roc_obj$sensitivities)
+gbm_b_index <- which.max(cv_gbm_b$roc_obj$specificities + cv_gbm_b$roc_obj$sensitivities)
+```
+
 ```{r block-ROC-comparison}
 ggplot() +
+  # lr ROC
   geom_line(aes(x = 1 - cv_lr_b$roc_obj$specificities,
                 y = cv_lr_b$roc_obj$sensitivities,
-                color = paste0("LR AUC = ", round(cv_lr_b$roc_obj$auc, 3)))) +
+                color = "lr")) +
+  # lr cutoff
+  geom_point(aes(x = 1 - cv_lr_b$roc_obj$specificities[lr_b_index],
+                 y = cv_lr_b$roc_obj$sensitivities[lr_b_index],
+                 color = "cutoff"),
+             shape = 8) +
+  # lda ROC
   geom_line(aes(x = 1 - cv_lda_b$roc_obj$specificities,
                 y = cv_lda_b$roc_obj$sensitivities,
-                color = paste0("LDA AUC = ", round(cv_lda_b$roc_obj$auc, 3)))) +
+                color = "lda")) +
+  # lda cutoff
+  geom_point(aes(x = 1 - cv_lda_b$roc_obj$specificities[lda_b_index],
+                 y = cv_lda_b$roc_obj$sensitivities[lda_b_index],
+                 color = "cutoff"),
+             shape = 8) +
+  # qda ROC
   geom_line(aes(x = 1 - cv_qda_b$roc_obj$specificities,
                 y = cv_qda_b$roc_obj$sensitivities,
-                color = paste0("QDA AUC = ", round(cv_qda_b$roc_obj$auc, 3)))) +
+                color = "qda")) +
+  # qda cutoff
+  geom_point(aes(x = 1 - cv_qda_b$roc_obj$specificities[qda_b_index],
+                 y = cv_qda_b$roc_obj$sensitivities[qda_b_index],
+                 color = "cutoff"),
+             shape = 8) +
+  # tree ROC
   geom_line(aes(x = 1 - cv_tree_b$roc_obj$specificities,
                 y = cv_tree_b$roc_obj$sensitivities,
-                color = paste0("Tree AUC = ", round(cv_tree_b$roc_obj$auc, 3)))) +
+                color = "tree")) +
+  # tree cutoff
+  geom_point(aes(x = 1 - cv_tree_b$roc_obj$specificities[tree_b_index],
+                 y = cv_tree_b$roc_obj$sensitivities[tree_b_index],
+                 color = "cutoff"),
+             shape = 8) +
+  # rf ROC
   geom_line(aes(x = 1 - cv_rf_b$roc_obj$specificities,
                 y = cv_rf_b$roc_obj$sensitivities,
-                color = paste0("RF AUC = ", round(cv_rf_b$roc_obj$auc, 3)))) +
+                color = "rf")) +
+  # rf cutoff
+  geom_point(aes(x = 1 - cv_rf_b$roc_obj$specificities[rf_b_index],
+                 y = cv_rf_b$roc_obj$sensitivities[rf_b_index],
+                 color = "cutoff"),
+             shape = 8) +
+  # gbm ROC
   geom_line(aes(x = 1 - cv_gbm_b$roc_obj$specificities,
                 y = cv_gbm_b$roc_obj$sensitivities,
-                color = paste0("GBM AUC = ", round(cv_gbm_b$roc_obj$auc, 3)))) +
+                color = "gbm")) +
+  # gbm cutoff
+  geom_point(aes(x = 1 - cv_gbm_b$roc_obj$specificities[gbm_b_index],
+                 y = cv_gbm_b$roc_obj$sensitivities[gbm_b_index],
+                 color = "cutoff"),
+             shape = 8) +
   labs(title = "Block Split Test ROC",
        x = "1 - Specificity", y = "Sensitivity",
-       color = "ROC curves")
+       color = "ROC curves") +
+  scale_color_manual(labels = c("Cutoffs",
+                                paste0("GBM AUC = ", round(cv_gbm_b$roc_obj$auc, 3)),
+                                paste0("LDA AUC = ", round(cv_lda_b$roc_obj$auc, 3)),
+                                paste0("LR AUC = ", round(cv_lr_b$roc_obj$auc, 3)),
+                                paste0("QDA AUC = ", round(cv_qda_b$roc_obj$auc, 3)),
+                                paste0("RF AUC = ", round(cv_rf_b$roc_obj$auc, 3)),
+                                paste0("Tree AUC = ", round(cv_tree_b$roc_obj$auc, 3))),
+                     values = c("black",
+                                "red",
+                                "orange",
+                                "yellow",
+                                "green",
+                                "blue",
+                                "purple"))
 ```
+
+Since specificity is the true negative rate and sensitivity is the true positive rate, we would like cutoff values on the ROC curves that maximize both of them. To obtain the cutoff value of each ROC curve, we sum the specificity and the sensitivity at each threshold and then pick the threshold that has the largest sum. By doing so, we pick the cutoff value for each model that maximizes both the true negative rate and the true positive rate.
 
 # Diagnostics
 
