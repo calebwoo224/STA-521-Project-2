@@ -367,12 +367,12 @@ for (im in ims){
     pull(Y) %>%
     unique()
   
-  xsplit = split(xvals,
+  xsplit = split(sort(xvals),
                  cut(seq_along(xvals),
                      8,
                      labels = FALSE))
   
-  ysplit = split(yvals,
+  ysplit = split(sort(yvals),
                  cut(seq_along(yvals),
                      8,
                      labels = FALSE))
@@ -413,7 +413,7 @@ invisible(mean(block_test_labels == 1))
 
 ```
 
-Next, we will run this trivial classifier on our image splitting method where we split image 2 in half for the validation and test sets. This method gives a validation set misclassification rate of $21.1\%$ and a test set misclassification rate of $36.4\%$, which is about in line with the overall rate of $-1$ labels being $78.9\%$ and $63.6\%$ respectively in the binary dataset (with unclassified points removed). Once again, this trivial classifier will have a high average accuracy if the majority of the points are $-1$ (cloudless). Since the majority of the points are cloudless in the validation and test sets, this trivial classifier appears to be fairly accurate even though it is just predicting the majority class each time.
+Next, we will run this trivial classifier on our image splitting method where we split image 2 in half for the validation and test sets. This method gives a validation set misclassification rate of $40.6\%$ and a test set misclassification rate of $43.2\%$, which is about in line with the overall rate of $-1$ labels being $38.9\%$ in the binary dataset (with unclassified points removed). Once again, this trivial classifier will have a high average accuracy if the majority of the points are $-1$ (cloudless). Since the majority of the points are cloudless in the validation and test sets, this trivial classifier appears to be fairly accurate even though it is just predicting the majority class each time.
 
 ```{r baseline-image-split}
 binary_image_split <- image_split(X_cv, y_cv, K = 8)
@@ -808,21 +808,18 @@ Of the different classifiers we considered, one of the best performing ones was 
 ```{r hyperest-ntree-lr, eval=FALSE, message=FALSE}
 ntrees_orig = c(1, 5, 10, 20, 25, 40, 50, 60, 75, 80, 100, 
                  120, 125, 140, 150, 160, 175, 180, 200, 
-                 225, 250, 275, 300)
-lr_orig = c(0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75)
+                 225, 250, 275, 300, 350, 400)
+lr_orig = c(0.005, 0.01, 0.025, 0.0375, 0.05, 0.0625, 0.075, 0.1, 0.25, 0.5)
 
 outs = list()
 outs_b = list()
 
 for (t in ntrees_orig) {
   for (l in lr_orig) {
-    print(c(t, l))
-    print("Block")
     mod = CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
                     K = 8, split = "image", type = "response",
                     distribution = "adaboost", bag.fraction = 1, n.trees = t,
                     shrinkage = l)
-    print("Image")
     mod_b = CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
                     K = 8, split = "block", type = "response",
                     distribution = "adaboost", bag.fraction = 1, n.trees = t,
@@ -859,8 +856,7 @@ ng1 = n_df %>%
                                                     group = lr,
                                                     color = lr),
             linewidth = 1) +
-  labs(title = "Block Split", 
-       subtitle = "AdaBoost Parameter Estimation",
+  labs(title = "Block Split",
        x = "Number of Trees Fit",
        y = "Misclassification Error",
        color = "Learning Rate") +
@@ -875,22 +871,26 @@ ng2 = n_df %>%
                                                     color = lr),
             linewidth = 1) +
   labs(title = "Image Split", 
-       subtitle = "AdaBoost Parameter Estimation",
        x = "Number of Trees Fit",
-       y = "Misclassification Error",
+       y = element_blank(),
        color = "Learning Rate")
 
-grid.arrange(ng1,ng2,nrow=1)
+ng_leg = ggpubr::get_legend(ng2)
 
-ng1
+ng2 = ng2 +
+  theme(legend.position = "none")
 
-ng2
+grid.arrange(ng1,ng2, ng_leg ,nrow=1, widths = c(1,1,.5))
 
 n_df %>%
   filter(folds == "A") %>%
   filter(block == min(block))
+
+n_df %>%
+  filter(folds == "A") %>%
+  filter(image == min(image))
 ```
-In total, 207 pairings of the two hyperparameters were trained on both split methods, with 23 distinct values for the number of trees and 9 distinct learning rate choices. In the block split method, there was minimal difference between the different learning rates with higher numbers of trees. At lower numbers of trees, however, the parameter pair with the lowest average cross-validated loss was 10 trees with a learning rate of 0.25. For image split, higher trees meant significantly better performance with both the 0.01 and 0.025 learning rates, compared to the other learning rates. However, the best parameter pair by average cross-validated loss was 50 trees with learning rate of 0.075.
+In total, 250 pairings of the two hyperparameters were trained on both split methods, with 25 distinct values for the number of trees and 10 distinct learning rate choices. In the block split method, at higher numbers of trees, the best performing learning rate is 0.01 with around 275 trees. For image split, higher trees meant significantly better performance with the 0.01 learning rate, compared to the other learning rates. However, the best parameter pair, for both split methods, by average cross-validated loss was 50 trees with learning rate of 0.075.
 
 ## Comparing Misclassification Errors
 
