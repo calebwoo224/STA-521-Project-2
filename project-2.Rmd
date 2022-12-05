@@ -413,7 +413,7 @@ block_test = td %>% filter(block %in% bks[(tmin+1):snum])
 
 ```
 
-Next, we will run this trivial classifier on our image splitting method where we split image 2 in half for the validation and test sets. This method gives a validation set misclassification rate of $40.6\%$ and a test set misclassification rate of $43.2\%$, which is about in line with the overall rate of $-1$ labels being $38.9\%$ in the binary dataset (with unclassified points removed). Once again, this trivial classifier will have a high average accuracy if the majority of the points are $-1$ (cloudless). Since the majority of the points are cloudless in the validation and test sets, this trivial classifier appears to be fairly accurate even though it is just predicting the majority class each time.
+Next, we will run this trivial classifier on our image splitting method where we split image 2 in half for the validation and test sets. This method gives a validation set misclassification rate of $21.1\%$ and a test set misclassification rate of $36.4\%$, which is about in line with the overall rate of $-1$ labels being $78.9\%$ and $63.6\%$ respectively in the binary dataset (with unclassified points removed). Once again, this trivial classifier will have a high average accuracy if the majority of the points are $-1$ (cloudless). Since the majority of the points are cloudless in the validation and test sets, this trivial classifier appears to be fairly accurate even though it is just predicting the majority class each time.
 
 ```{r baseline-image-split}
 binary_image_split <- image_split(X_cv, y_cv, K = 8)
@@ -955,14 +955,8 @@ cmB$table %>%
 ## Comparing Misclassification Errors
 
 ```{r best-models, message=FALSE}
-i_gbm_final <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
-                  K = 8, split = "image", type = "response",
-                  distribution = "adaboost", bag.fraction = 1,
-                  n.trees = 50, shrinkage = 0.075)
-b_gbm_final <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
-                  K = 8, split = "block", type = "response",
-                  distribution = "adaboost", bag.fraction = 1,
-                  n.trees = 50, shrinkage = 0.075)
+i_gbm_final <- gbm_best
+b_gbm_final <- gbm_best_b
 ```
 
 ```{r image-preds-breaks}
@@ -1100,6 +1094,12 @@ i_features_errors[[3]]
 b_features_errors[[3]]
 ```
 
+Above are the same 3 density plots for each of our 3 best features separated by label from the exploratory data analysis section. Below the density plots are the tables of error rates of the 3 best features over 5 equally sized bins of the feature values for each of our data splitting methods. For each bin over the range of corresponding feature values, we have the overall misclassification rate, the number of cloud labels, the false negative rate, the number of cloudless labels, and the false positive rate. As evidenced by the densities of the cloud and cloudless labels for the NDAI and CORR features, the densities are well separated so that all 3 error rates over the 5 ranges of feature values reflect this.
+
+Both data splitting methods have increasing false positive rates and decreasing false negative rates with increasing values of NDAI. These results align with our visual results because at lower values of NDAI, there is a high probability of observing cloudless labels so that there are a small number of cloud labels and a large number of cloudless labels that are mostly classified as cloudless which reflects the high false negative rate and the low false positive rate. As the range of NDAI values increase, the probability of observing cloud labels increases so that there are a large number of cloud labels and a small number of cloudless labels that are mostly classified as clouds which reflects the increasing false positive rate and the decreasing false negative rate. We observe fairly high misclassification rates of a large number of samples around NDAI values of 0.633 to 0.727 because this is about where the 2 densities of cloud and cloudless labels intersect at a high probability. The same pattern of increasing false positive rates and decreasing false negative rates is found with increasing values of CORR for the same reasons as NDAI. We observe the highest misclassification rates of a large number of samples around the CORR values of 0.106 to 0.344 because this is about where the 2 densities for CORR intersect at a high probability.
+
+The pattern is reversed for increasing values of BF so that both data splitting methods have decreasing false positive rates and increasing false negative rates. These results align with our visual results because at lower values of BF, there is a high and more spread out density of cloud labels so that there are a large number of cloud labels and a small number of cloudless labels that are mostly classified as clouds which reflects the low false negative rate and the high false positive rate. As the range of BF values increase, the probability of observing cloudless labels drastically increases so that there are a small number of of cloud labels and a large number of cloudless labels that are mostly classified as cloudless which reflects the increasing false negative rate and the decreasing false positive rate. We observe fairly high misclassification rates of a large number of samples around BF values of 195 to 254 because this is about where the 2 densities of cloud and cloudless labels intersect at a high probability.
+
 ```{r image-2-maps}
 i_maps_folds <- list()
 i_maps_response <- list()
@@ -1219,6 +1219,10 @@ grid.arrange(i_maps_folds[[2]], i_maps_response[[2]], i_maps_confusion[[2]],
 grid.arrange(i_maps_folds[[3]], i_maps_response[[3]], i_maps_confusion[[3]],
              nrow = 1, ncol = 3)
 ```
+
+The maps above correspond to the 3 images that are split using the image split method. Each row of maps represents one of the 3 images. The left most map of each row visualizes the points that are assigned to each fold from the image split method. In image 2, the left half is assigned to the test set as mentioned before while the right half is split into folds 4 and 5. The middle map of each row visualizes the probability of each point being a cloud label based on the cross validation response predictions for each fold or the test response predictions. Let us refer to the middle maps as the probability maps. The right most map of each row visualizes whether each point is a true positive, true negative, false positive, or false negative. Let us refer to the right most maps as the confusion matrix maps.
+
+Based on the probability and confusion matrix maps, we immediately observe that the image 1 predictions are most accurate. The reason appears to be that image 1 has the largest number of expert labels provided so there are fewer gaps of unlabeled points which allows for better overall predictions. On the other hand, image 3 has numerous large gaps of unlabeled points and thus has numerous regions with high misclassification rates. The probability and confusion matrix maps also suggest that misclassifications most often occur in regions where the true cloud and cloudless labels are very close to each other. For example, the test set shows how a small cloudless region sandwiched between 2 larger cloud regions is almost completely misclassified as a cloud. This is less of a problem for a well labeled image like image 1, but even then it has many false positives on the left side of fold 3 where a region of cloudless points practically borders a region of cloud points. Furthermore, the high number of false positives and false negatives around the bottom border of fold 1, left border of fold 4, and all fold borders of image 3 suggest that the predictions often misclassify at the borders of the splitted image blocks. We believe that misclassifications at block borders is further exacerbated in the block split method because there are a larger number of smaller blocks. This would explain the higher misclassification rates across the board for the block split method compared to the image split method.
 
 ## Finding a Better Classifier
 
