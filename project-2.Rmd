@@ -33,10 +33,11 @@ library(naivebayes)
 library(pROC)
 library(gbm)
 library(rlist)
+library(proj2functions)
 
-source("CVmaster.R")
-source("image_split.R")
-source("block_split.R")
+#source("CVmaster.R")
+#source("image_split.R")
+#source("block_split.R")
 
 knitr::opts_chunk$set(fig.align="center", echo=FALSE, eval=TRUE,
                       message=FALSE, warning=FALSE, error=FALSE)
