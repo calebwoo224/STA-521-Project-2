@@ -19,6 +19,7 @@ image_split <- function(data, labels, K) {
         arrange(X) %>%
         pull(X) %>%
         unique()
+      x_range = sort(x_range)
       half_i = floor(length(x_range)/2)
       
       test = val_test %>%
@@ -40,14 +41,15 @@ image_split <- function(data, labels, K) {
         pull(Y) %>%
         unique()
       if (val_blocks > 1) {
-        ysplit = split(yvals,
+        xsplit = sort(xvals)
+        ysplit = split(sort(yvals),
                        cut(seq_along(yvals),
                            val_blocks,
                            labels = FALSE))
       }
       else {
-        xsplit = xvals
-        ysplit = yvals
+        xsplit = sort(xvals)
+        ysplit = sort(yvals)
       }
     }
     else {
@@ -59,7 +61,8 @@ image_split <- function(data, labels, K) {
         filter(image == im) %>%
         pull(Y) %>%
         unique()
-      ysplit = split(yvals,
+      xsplit = sort(xvals)
+      ysplit = split(sort(yvals),
                      cut(seq_along(yvals),
                          train_blocks,
                          labels = FALSE))
@@ -71,7 +74,7 @@ image_split <- function(data, labels, K) {
           snum = snum + 1
           data = data %>%
             mutate(block = ifelse(
-              ((image == im) & (X %in% xvals) & (Y %in% ys)), 
+              ((image == im) & (X %in% xsplit) & (Y %in% ys)), 
               snum, block))
       }
     }
