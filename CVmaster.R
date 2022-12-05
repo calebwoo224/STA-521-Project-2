@@ -202,6 +202,7 @@ CVmaster = function(training_data, training_labels, classifier,
     "cv_preds" = cv_preds,
     "cv_response_preds" = cv_response_preds,
     "test_preds" = test_preds,
-    "test_response_preds" = test_response_preds
+    "test_response_preds" = test_response_preds,
+    "test_labels" = test_labels
   ))
 }
