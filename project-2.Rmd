@@ -892,6 +892,75 @@ n_df %>%
 ```
 In total, 250 pairings of the two hyperparameters were trained on both split methods, with 25 distinct values for the number of trees and 10 distinct learning rate choices. In the block split method, at higher numbers of trees, the best performing learning rate is 0.01 with around 275 trees. For image split, higher trees meant significantly better performance with the 0.01 learning rate, compared to the other learning rates. However, the best parameter pair, for both split methods, by average cross-validated loss was 50 trees with learning rate of 0.075.
 
+```{r best-gbm-training, message=FALSE}
+gbm_best = CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
+                    K = 8, split = "image", type = "response",
+                    distribution = "adaboost", bag.fraction = 1, n.trees = 50,
+                    shrinkage = 0.075, thresh = 0.59479)
+gbm_best_b = CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
+                    K = 8, split = "block", type = "response",
+                    distribution = "adaboost", bag.fraction = 1, n.trees = 50,
+                    shrinkage = 0.075, thresh = 0.23699)
+
+gbm_best_index <- which.max(gbm_best$roc_obj$specificities 
+                            + gbm_best$roc_obj$sensitivities)
+
+gbm_bestb_index <- which.max(gbm_best_b$roc_obj$specificities 
+                             + gbm_best_b$roc_obj$sensitivities)
+
+best_thresh = gbm_best$roc_obj$thresholds[gbm_best_index]
+best_thresh_b = gbm_best_b$roc_obj$thresholds[gbm_bestb_index]
+
+ggplot() +
+  geom_line(aes(x = 1 - gbm_best_b$roc_obj$specificities,
+                y = gbm_best_b$roc_obj$sensitivities,
+                color = "gbm")) +
+  geom_point(aes(x = 1 - gbm_best_b$roc_obj$specificities[gbm_bestb_index],
+                 y = gbm_best_b$roc_obj$sensitivities[gbm_bestb_index],
+                 color = "cutoff"),
+             shape = 8) +
+  geom_line(aes(x = 1 - gbm_best$roc_obj$specificities,
+                y = gbm_best$roc_obj$sensitivities,
+                color = "lda")) +
+  geom_point(aes(x = 1 - gbm_best$roc_obj$specificities[gbm_best_index],
+                 y = gbm_best$roc_obj$sensitivities[gbm_best_index],
+                 color = "cutoff"),
+             shape = 8) +
+  labs(title = "Best GBM Model Test ROC",
+       x = "1 - Specificity", y = "Sensitivity",
+       color = "ROC curves") +
+  scale_color_manual(labels = c("Cutoffs",
+                                paste0("GBM Block AUC = ", 
+                                       round(gbm_best_b$roc_obj$auc, 3)),
+                                paste0("GBM Image AUC = ",
+                                       round(gbm_best$roc_obj$auc, 3))),
+                     values = c("black",
+                                "purple",
+                                "orange")
+  )
+```
+Looking at the ROC curve, we can choose a cutoff such that the sum of the specificity and sensitivity is maximized, since the goal is to have a model that has both maximum sensitivity and maximum specificity. We can also determine the best threshold for that cutoff, which for the image split method is a threshold of $\alpha_i \approx 0.59479$ and for the block split method is $\alpha_b \approx 0.23699$. With these thresholds, we can also calculate confusion matrices on the test sets for each split method. Looking at the confusion matrix, the image split method returns a test set predictive accuracy of $\approx 86.9\%$, with a sensitivity of $\approx 82.7\%$ and a specificity of $94.4 \%$. Most significantly, the positive predictive value of the model, with cloudlessness as the positive class, is $0.9624$, meaning that $96.24 \%$ of the cloudless points are predicted cloudless are actually cloudless. This suggests that the model is strong in that, if it predicts a pixel to be cloudless, it is very likely to actually be cloudless. In contrast, for the block split method, the test set predictive accuracy is $\approx 74.2 \%$, with a sensitivity of $76.2 \%$ and a specificity of $71.6\%$. Although weaker across the board than the image split model, the positive predictive value of the block split model is still $0.7796$, and the model is still stronger in predicting cloudlessness than in predicting the existence of clouds.
+
+```{r}
+cmI = confusionMatrix(as.factor(gbm_best$test_preds), 
+                reference = gbm_best$test_labels)
+
+cmB = confusionMatrix(as.factor(gbm_best_b$test_preds), 
+                reference = gbm_best_b$test_labels)
+
+cmI$table %>%
+  kable(digits=3,
+        caption="Image Split Confusion Matrix") %>%
+  kable_styling(latex_options="HOLD_position", full_width=F,
+                position = "float_left")
+
+cmB$table %>%
+  kable(digits=3,
+        caption="Block Split Confusion Matrix") %>%
+  kable_styling(latex_options="HOLD_position", full_width=F,
+                position = "float_left")
+```
+
 ## Comparing Misclassification Errors
 
 ## Finding a Better Classifier
