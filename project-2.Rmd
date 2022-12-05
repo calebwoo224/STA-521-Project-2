@@ -649,7 +649,7 @@ ggplot() +
                                 "purple"))
 ```
 
-```{r block-split-baseline}
+```{r block-baseline-cv}
 bsplit = block_split(X_cv, y_cv, K=8, seed=521)
 btraining_data = bsplit$training_data
 blabels = bsplit$labels
