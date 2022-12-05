@@ -289,7 +289,6 @@ In splitting the dataset into training, validation, and test subsets, it is impo
 A second method for splitting the data into three sets is to assign all data from images 1 and 3 to the training data. Then we can split the image 2 data in half to assign each half to the validation and test sets respectively. By doing so, we retain the majority of the data for training to better fit our classifiers. In addition, by splitting image 2 in half, we still retain the spatial structure of the data for the validation and test sets. We believe that image 2 is the best choice to split in half for our validation and test sets because each half contains numerous samples from each class. Looking at the maps of the validation and test sets below, we see that each set contains a sizable number of cloud and non-cloud samples. Since we would like to incorporate this image split method with the cross validation function, we will incorporate the validation data which is half of image 2 into the training data and use the validation data along with the training data from images 1 and 3 to train and validate on K folds of data before checking how the trained model will perform on the separate test data from image 2.
 
 ```{r val-test-maps}
-#source("image_split.R")
 split_ims <- image_split(data[,-4], data[,4], K=8)
 
 val_map <- ggplot(data=split_ims$val_data, aes(x=X, y=Y,
@@ -317,7 +316,7 @@ grid.arrange(test_map, val_map, leg, nrow=1)
 
 Before splitting the data, we first remove all observations with 0 labels which correspond to the unlabeled points because we are primarily focused on detecting the presence of clouds or no clouds in the images. Therefore, a binary classification task between the 1 and -1 labels is a more appropriate way of approaching this problem. Even if we approached this problem as a multi-classification task between 3 different labels and were predicting all 3 labels accurately, predicting the unlabeled points accurately is somewhat meaningless in the context of detecting the presence of clouds or no clouds in the images.
 
-We can now split the data using the methods outlined above and run a "classifier" which just sets all points to label $-1$, indicating cloudlessness. For the block splitting method, we split each image into 64 blocks, for a total of 192 blocks, of which 30 are for testing, 30 are for validation, and 132 are for training. This method gives a validation set misclassification rate of $63.0\%$ and a test set misclassification rate of $65.3\%$, which is about in line with the overall rate of $-1$ labels being $35-36\%$. This classifier would yield high accuracy if the image data was unbalanced to be mostly cloudless images, but in a scenario where the majority of points are not labeled $-1$, it is not a particularly accurate classifier.
+We can now split the data using the methods outlined above and run a "classifier" which just sets all points to label $-1$, indicating cloudlessness. For the block splitting method, we split each image into 64 blocks, for a total of 192 blocks, of which 30 are for testing, 30 are for validation, and 132 are for training. This method gives a validation set misclassification rate of $40.6\%$ and a test set misclassification rate of $43.2\%$, which is about in line with the overall rate of $-1$ labels being $59.4\%$ and $56.8\%$ respectively. This classifier would yield high accuracy if the image data was unbalanced to be mostly cloudless images, but in a scenario where a slight majority of points are labeled $-1$, it is not a particularly accurate classifier.
 
 ```{r binary-data-all}
 X_cv <- data %>%
@@ -408,8 +407,8 @@ block_train = td %>% filter(block %in% bks[1:(tmin-30)])
 block_valid = td %>% filter(block %in% bks[(tmin-29):tmin])
 block_test = td %>% filter(block %in% bks[(tmin+1):snum])
 
-invisible(mean(block_valid_labels == 1))
-invisible(mean(block_test_labels == 1))
+#mean(block_valid_labels == 1)
+#mean(block_test_labels == 1)
 
 ```
 
@@ -477,7 +476,7 @@ mutual_info <- function(feature) {
   mutinformation(y_cv, discretize(feature))
 }
 
-mi_table <- apply(X_cv[, 5:ncol(data)], MARGIN=2, FUN=mutual_info)
+mi_table <- apply(X_cv[, 5:ncol(X_cv)], MARGIN=2, FUN=mutual_info)
 mi_table <- data.frame(t(mi_table))
 rownames(mi_table) <- "Entropy"
 mi_table %>%
@@ -514,7 +513,6 @@ The function also allows for the image splitting method described in Section 2(a
 # Modeling
 
 ```{r image-split-CVs, include=FALSE, warning=FALSE, message=FALSE}
-source("CVmaster.R")
 cv_lr <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
                   K = 8, split = "image", type = "response",
                   family="binomial")
@@ -669,10 +667,10 @@ btraining_data = btraining_data %>%
   filter(block %in% bbks)
 btraining_labels = btraining_labels[blabels %in% bbks]
 blabels = blabels[blabels %in% bbks]
-folds = createFolds(bbks, k = 8)
+folds_b = createFolds(bbks, k = 8)
 
 block_split_baseline <- c()
-for (f in folds) {
+for (f in folds_b) {
   y = btraining_labels[blabels %in% f]
   freq <- mean(y != 0)
   block_split_baseline <- c(block_split_baseline, freq)
@@ -954,6 +952,272 @@ cmB$table %>%
 ```
 
 ## Comparing Misclassification Errors
+
+```{r best-models, message=FALSE}
+i_gbm_final <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
+                  K = 8, split = "image", type = "response",
+                  distribution = "adaboost", bag.fraction = 1,
+                  n.trees = 50, shrinkage = 0.075)
+b_gbm_final <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
+                  K = 8, split = "block", type = "response",
+                  distribution = "adaboost", bag.fraction = 1,
+                  n.trees = 50, shrinkage = 0.075)
+```
+
+```{r image-preds-breaks}
+isplit_labeled <- rbind(binary_image_split$training_data, binary_image_split$test_data)
+
+isplit_labeled$preds <- rep(-2, nrow(isplit_labeled))
+isplit_labeled$response <- rep(-2, nrow(isplit_labeled))
+isplit_labeled$index <- seq(from = 1, to = nrow(isplit_labeled))
+
+image_y_breaks <- list()
+for (b in unique(isplit_labeled$block)) {
+  rows <- isplit_labeled %>%
+    filter(block == b) %>%
+    pull(index)
+  if (b == 0) {
+    isplit_labeled[rows, ] <- isplit_labeled %>%
+      filter(block == b) %>%
+      mutate(preds = i_gbm_final$test_preds) %>%
+      mutate(response = i_gbm_final$test_response_preds)
+  }
+  else {
+    isplit_labeled[rows, ] <- isplit_labeled %>%
+      filter(block == b) %>%
+      mutate(preds = i_gbm_final$cv_preds[[b]]) %>%
+      mutate(response = i_gbm_final$cv_response_preds[[b]])
+    
+    y_range <- isplit_labeled %>%
+      filter(block == b) %>%
+      pull(Y) %>%
+      unique()
+    image_y_breaks[[b]] <- c(min(y_range),
+                             max(y_range))
+  }
+}
+
+x_break <- image2 %>%
+  pull(X) %>%
+  unique() %>%
+  sort()
+x_right <- max(x_break)
+x_half <- median(x_break)
+
+isplit_labeled$confusion <- rep("U", nrow(isplit_labeled))
+isplit_labeled <- isplit_labeled %>%
+  mutate(confusion = case_when(
+    (Label == 1 & preds == 1) ~ "TP",
+    (Label == 0 & preds == 1) ~ "FP",
+    (Label == 0 & preds == 0) ~ "TN",
+    (Label == 1 & preds == 0) ~ "FN"
+  ))
+```
+
+```{r block-features-errors}
+btraining_data$preds <- rep(-2, nrow(btraining_data))
+btraining_data$response <- rep(-2, nrow(btraining_data))
+btraining_data$index <- seq(from = 1, to = nrow(btraining_data))
+
+btest_blocks <- btest_data %>%
+  pull(block) %>%
+  unique()
+for (f in 1:8) {
+  folds_b[[f]] <- folds_b[[f]][!folds_b[[f]] %in% btest_blocks]
+  rows <- btraining_data %>%
+    filter(block %in% folds_b[[f]]) %>%
+    pull(index)
+  btraining_data[rows, ] <- btraining_data %>%
+    filter(block %in% folds_b[[f]]) %>%
+    mutate(preds = b_gbm_final$cv_preds[[f]]) %>%
+    mutate(response = b_gbm_final$cv_response_preds[[f]])
+}
+
+b_cv <- btraining_data %>%
+  filter(preds != -2 & response != -2)
+b_cv$confusion <- rep("U", nrow(b_cv))
+b_cv <- b_cv %>%
+  mutate(confusion = case_when(
+    (Label == 1 & preds == 1) ~ "TP",
+    (Label == 0 & preds == 1) ~ "FP",
+    (Label == 0 & preds == 0) ~ "TN",
+    (Label == 1 & preds == 0) ~ "FN"
+  ))
+
+b_cv$`NDAI Range` <- cut(b_cv$NDAI, breaks = 5)
+b_cv$`CORR Range` <- cut(b_cv$CORR, breaks = 5)
+b_cv$`BF Range` <- cut(b_cv$BF, breaks = 5)
+
+b_features_errors <- list()
+for (f in 18:20) {
+  b_features_errors[[f-17]] <- b_cv %>%
+    group_by_at(f) %>%
+    summarise(Misclassification = sum(Label != preds)/n(),
+              P = sum(Label == 1),
+              FNR = sum(confusion == "FN")/sum(Label == 1),
+              N = sum(Label == 0),
+              FPR = sum(confusion == "FP")/sum(Label == 0)) %>%
+    kable(digits = 3,
+          caption = paste0("Block Split ",
+                           colnames(b_cv)[f],
+                           " Errors")) %>%
+    kable_styling(latex_options = "HOLD_position",
+                  full_width = F)
+}
+```
+
+```{r image-features-errors}
+isplit_labeled$`NDAI Range` <- cut(isplit_labeled$NDAI, breaks = 5)
+isplit_labeled$`CORR Range` <- cut(isplit_labeled$CORR, breaks = 5)
+isplit_labeled$`BF Range` <- cut(isplit_labeled$BF, breaks = 5)
+i_features_errors <- list()
+for (f in 18:20) {
+  i_features_errors[[f-17]] <- isplit_labeled %>%
+    filter(block != 0) %>%
+    group_by_at(f) %>%
+    summarise(Misclassification = sum(Label != preds)/n(),
+              P = sum(Label == 1),
+              FNR = sum(confusion == "FN")/sum(Label == 1),
+              N = sum(Label == 0),
+              FPR = sum(confusion == "FP")/sum(Label == 0)) %>%
+    kable(digits = 3,
+          caption = paste0("Image Split ",
+                           colnames(isplit_labeled)[f],
+                           " Errors")) %>%
+    kable_styling(latex_options = "HOLD_position",
+                  full_width = F)
+}
+```
+
+```{r features-errors}
+grid.arrange(g1, g3, g6, nrow = 1)
+i_features_errors[[1]]
+b_features_errors[[1]]
+i_features_errors[[2]]
+b_features_errors[[2]]
+i_features_errors[[3]]
+b_features_errors[[3]]
+```
+
+```{r image-2-maps}
+i_maps_folds <- list()
+i_maps_response <- list()
+i_maps_confusion <- list()
+
+i_maps_folds[[2]] <- isplit_labeled %>%
+  filter(image == 2) %>%
+  ggplot(aes(x=X, y=Y, color=factor(block))) +
+  geom_point() +
+  coord_quickmap(expand = F, clip = "on") +
+  labs(title = "Image 2", color = "Fold") +
+  scale_color_manual(labels = c("Test Set", "4", "5"),
+                     values = c("red", "green", "blue")) +
+  theme_void() +
+  theme(legend.position = "left")
+
+i_maps_response[[2]] <- isplit_labeled %>%
+  filter(image == 2) %>%
+  ggplot(aes(x=X, y=Y, color=response)) +
+  geom_point() +
+  geom_vline(xintercept = x_half,
+             linetype = "dashed", color = "red") +
+  geom_segment(x = x_half, xend = x_right,
+               y = image_y_breaks[[4]][2], yend = image_y_breaks[[4]][2],
+               linetype = "dashed", color = "red") +
+  coord_quickmap(expand = F, clip = "on") +
+  labs(color = "Pr (Label = Cloud)") +
+  theme_void() +
+  theme(legend.position = "none")
+
+i_maps_confusion[[2]] <- isplit_labeled %>%
+  filter(image == 2) %>%
+  ggplot(aes(x=X, y=Y, color=confusion)) +
+  geom_point() +
+  geom_vline(xintercept = x_half,
+             linetype = "dashed", color = "black") +
+  geom_segment(x = x_half, xend = x_right,
+               y = image_y_breaks[[4]][2], yend = image_y_breaks[[4]][2],
+               linetype = "dashed", color = "black") +
+  coord_quickmap(expand = F, clip = "on") +
+  labs(color = "Results") +
+  scale_color_manual(labels = c("FN", "FP", "TN", "TP"),
+                     values = c("deeppink", "darkviolet",
+                                "chocolate3", "deepskyblue")) +
+  theme_void() +
+  theme(legend.position = "none")
+```
+
+```{r image-1-3-maps}
+for (i in c(1, 3)) {
+  i_folds <- isplit_labeled %>%
+    filter(image == i) %>%
+    pull(block) %>%
+    unique()
+  i_folds <- sort(i_folds)
+  
+i_maps_folds[[i]] <- isplit_labeled %>%
+  filter(image == i) %>%
+  ggplot(aes(x=X, y=Y, color=factor(block))) +
+  geom_point() +
+  coord_quickmap(expand = F, clip = "on") +
+  labs(title = paste0("Image ", i),
+       color = "Fold") +
+  scale_color_manual(values = c("red", "green", "blue")) +
+  theme_void() +
+  theme(legend.position = "left")
+
+i_maps_response[[i]] <- isplit_labeled %>%
+  filter(image == i) %>%
+  ggplot(aes(x=X, y=Y, color=response)) +
+  geom_point() +
+  geom_hline(yintercept = image_y_breaks[[i_folds[1]]][2],
+             linetype = "dashed",
+             color = "red") +
+  geom_hline(yintercept = image_y_breaks[[i_folds[2]]][2],
+             linetype = "dashed",
+             color = "red") +
+  coord_quickmap(expand = F, clip = "on") +
+  labs(color = "Pr (Label = Cloud)") +
+  theme_void()
+
+i_maps_confusion[[i]] <- isplit_labeled %>%
+  filter(image == i) %>%
+  ggplot(aes(x=X, y=Y, color=confusion)) +
+  geom_point() +
+  geom_hline(yintercept = image_y_breaks[[i_folds[1]]][2],
+             linetype = "dashed",
+             color = "black") +
+  geom_hline(yintercept = image_y_breaks[[i_folds[2]]][2],
+             linetype = "dashed",
+             color = "black") +
+  coord_quickmap(expand = F, clip = "on") +
+  labs(color = "Results") +
+  scale_color_manual(labels = c("FN", "FP", "TN", "TP"),
+                     values = c("deeppink", "darkviolet",
+                                "chocolate3", "deepskyblue")) +
+  theme_void()
+}
+blank <- ggplot() + theme_void()
+leg_response <- ggpubr::get_legend(i_maps_response[[1]])
+leg_confusion <- ggpubr::get_legend(i_maps_confusion[[1]])
+for (i in c(1, 3)) {
+  i_maps_response[[i]] <- i_maps_response[[i]] +
+    theme(legend.position="none")
+  i_maps_confusion[[i]] <- i_maps_confusion[[i]] +
+    theme(legend.position="none")
+}
+```
+
+```{r image-maps-all}
+grid.arrange(blank, leg_response, leg_confusion,
+             nrow = 1, ncol = 3)
+grid.arrange(i_maps_folds[[1]], i_maps_response[[1]], i_maps_confusion[[1]],
+             nrow = 1, ncol = 3)
+grid.arrange(i_maps_folds[[2]], i_maps_response[[2]], i_maps_confusion[[2]],
+             nrow = 1, ncol = 3)
+grid.arrange(i_maps_folds[[3]], i_maps_response[[3]], i_maps_confusion[[3]],
+             nrow = 1, ncol = 3)
+```
 
 ## Finding a Better Classifier
 
