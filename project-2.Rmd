@@ -942,13 +942,13 @@ cmB = confusionMatrix(as.factor(gbm_best_b$test_preds),
 cmI$table %>%
   kable(digits=3,
         caption="Image Split Confusion Matrix") %>%
-  kable_styling(latex_options="HOLD_position", full_width=F,
+  kable_styling(full_width=F,
                 position = "float_left")
 
 cmB$table %>%
   kable(digits=3,
         caption="Block Split Confusion Matrix") %>%
-  kable_styling(latex_options="HOLD_position", full_width=F,
+  kable_styling(full_width=F,
                 position = "float_left")
 ```
 
