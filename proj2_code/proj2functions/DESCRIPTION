@@ -1,0 +1,16 @@
+Package: proj2functions
+Title: Project 2 Function
+Version: 1.0.0
+Authors@R: 
+    person("Eli", "Gnesin", , "eli.gnesin@duke.edu", role = "cre")
+    person("Caleb", "Woo", , "caleb.woo@duke.edu", role = "cre")
+Description: Simple package containing the project 2 functions for Block split, Image split, and CVmaster.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.2
+Imports:
+  tidyverse,
+  dplyr,
+  caret,
+  pROC

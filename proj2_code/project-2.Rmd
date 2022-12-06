@@ -1,0 +1,1359 @@
+---
+title: "STA 521 Project 2"
+author: "Eli Gnesin (ejg45) & Caleb Woo (csw57)"
+date: "2022-12-06"
+number-sections: true
+geometry: "left=1.5cm,right=1.5cm,top=1.35cm,bottom=1.9cm"
+bibliography: references.bib
+output: pdf_document
+---
+
+# Data Collection and Exploration
+
+```{r setup-packages, echo=FALSE, message=FALSE}
+library(tidyverse)
+library(GGally)
+library(ggplot2)
+library(lubridate)
+library(magrittr)
+library(gridExtra)
+library(latex2exp)
+library(stats)
+library(plotly)
+library(rjson)
+library(kableExtra)
+library(knitr)
+library(caret)
+library(tree)
+library(tidymodels)
+library(MASS)
+library(tidyr)
+library(randomForest)
+library(naivebayes)
+library(pROC)
+library(gbm)
+library(rlist)
+library(proj2functions)
+
+#source("CVmaster.R")
+#source("image_split.R")
+#source("block_split.R")
+
+knitr::opts_chunk$set(fig.align="center", echo=FALSE, eval=TRUE,
+                      message=FALSE, warning=FALSE, error=FALSE)
+```
+
+```{r read-data}
+columns = c("image", "Y", "X", "Label", "NDAI", "SD", "CORR", 
+            "DF", "CF", "BF", "AF", "AN")
+
+image1 = read.table("image_data/imagem1.txt", header=FALSE)
+image1 = cbind(rep(1, nrow(image1)), image1)
+colnames(image1) = columns
+
+image2 = read.table("image_data/imagem2.txt", header=FALSE)
+image2 = cbind(rep(2, nrow(image2)), image2)
+colnames(image2) = columns
+
+image3 = read.table("image_data/imagem3.txt", header=FALSE)
+image3 = cbind(rep(3, nrow(image3)), image3)
+colnames(image3) = columns
+
+data = rbind(image1, image2, image3)
+```
+
+## Summary of the Paper
+
+In 2008, Yu et al. published "Daytime Arctic Cloud Detection Based on Multi-Angle Satellite Data With Case Studies" [@shi_yu_clothiaux_braverman_2008]. The purpose of the study was to explore the state of daytime Arctic cloud classification methods, and propose a new "Enhanced Linear Correlation Matching Algorithm" and classification system less reliant on manual human classification.
+
+The data used in the study was collected by the Multiangle Imaging SpectroRadiometer (MISR) on NASA's Terra satellite, and for this study, 10 orbits of the satellite path over the Arctic, northern Greenland, and Baffin Bay, collected between April and September 2002, were used. Together, this dataset comprises 57 "data units" of three MISR blocks each (with a block being $\frac{1}{180}$ of a path), totaling 7.11 million pixels of 1.1 kilometer resolution (as well as 275 meter resolution for red radiation measurements). The labels of cloud cover and no-cloud cover (as well as an "ambiguous" label), were provided by industry experts.
+
+The research team then used the data to construct three "physical features," CORR, SD, NDAI. CORR is the average of the linear correlations of two pairs of radiation measurements (Af/An and Bf/An), where higher values suggest a cloud-free image. The second, SD, is the standard deviation of the An radiation measurements, used to help detect "smooth cloud-free surfaces", and NDAI is the average of two radiation measurements over a 1.1 kilometer spatial resolution. Using these features, the research team created two decision rules to label a 1.1 km square pixel as clear, and with setting appropriate thresholds, reached over 91% agreement with the expert labels and 100% coverage in labeling. From this, the team demonstrated that the three physical features were sufficient to accurately classify cloud cover in arctic environments with better spatial coverage and real-time adaptive thresholding to improve the robustness of the model. Furthermore, the ELCM algorithm was used to train QDA to provide probability labels for partly cloudy images and was found to be effective in identifying cloud boundaries. By improving understanding of the flow of radiation through the atmosphere and how clouds respond to changes in arctic climate, this study is the first step towards analyzing how changing cloud properties may impact the changes in the Arctic brought about by climate change.
+
+## Summary of the Data
+
+```{r summary-pixels}
+class_count <- data %>%
+  count(Label)
+class_count$Label <- c("Not Cloud", "Unlabeled", "Cloud")
+class_count$n <- 100*(class_count$n/nrow(data))
+names(class_count)[2] <- "% of pixels"
+class_count %>%
+  pivot_wider(names_from = Label,
+              values_from = -Label) %>%
+  as.data.frame(row.names = "% of pixels") %>%
+  kbl(digits = 3) %>%
+  kable_styling(latex_options = "HOLD_position", full_width = F)
+```
+
+The above table gives the percentages of expert labels in the dataset. In the maps below, we observe many unlabeled points around the cloud boundaries which separate the cloud pixels from the non-cloud pixels. As such, an i.i.d. assumption for the samples cannot be justified for this dataset because individual pixel classes seem to depend on the classes of the pixels around it. If the data appeared to be i.i.d. we would expect a random scatter of cloud and cloudless pixels in any given region of an image. However, we observe clear spatial trends where cloud pixels are near other cloud pixels, unlabeled pixels border the clouds, and non-cloud pixels are near other non-cloud pixels. Therefore, individual pixels hold less meaning without the context of nearby pixels so we cannot make an i.i.d. assumption on the data.
+
+```{r maps, fig.width = 8, fig.height = 3}
+map1 <- ggplot(data=image1, aes(x=X, y=Y, color=factor(Label))) +
+  geom_point() +
+  coord_quickmap(expand = F, clip = "on") +
+  labs(title = "Image 1") +
+  scale_color_manual(labels = c("Not Cloud", "Unlabeled", "Cloud"),
+                     values = c("chocolate3", "darkseagreen", "deepskyblue"),
+                     name = "Label") +
+  theme_void() +
+  theme(legend.position = "none")
+map2 <- ggplot(data=image2, aes(x=X, y=Y, color=factor(Label))) +
+  geom_point() +
+  coord_quickmap(expand = F, clip = "on") +
+  labs(title = "Image 2") +
+  scale_color_manual(labels = c("Not Cloud", "Unlabeled", "Cloud"),
+                     values = c("chocolate3", "darkseagreen", "deepskyblue"),
+                     name = "Label") +
+  theme_void() +
+  theme(legend.position = "none")
+map3 <- ggplot(data=image3, aes(x=X, y=Y, color=factor(Label))) +
+  geom_point() +
+  coord_quickmap(expand = F, clip = "on") +
+  labs(title = "Image 3") +
+  scale_color_manual(labels = c("Not Cloud", "Unlabeled", "Cloud"),
+                     values = c("chocolate3", "darkseagreen", "deepskyblue"),
+                     name = "Label") +
+  theme_void()
+
+leg = ggpubr::get_legend(map3)
+
+map3 = map3 +
+  theme(legend.position = "none")
+
+grid.arrange(map1, map2, map3, leg, nrow=1, widths = c(1,1,1,0.5))
+```
+
+## Exploratory Data Analysis
+
+We now continue with a short exploration of the data itself. First, we look at the pairwise correlations between the features, excluding the coordinates (and dropping unlabeled or "ambiguous" points):
+
+```{r binary-data-all}
+X_cv <- data %>%
+  filter(Label != 0) %>%
+  mutate(Label = ifelse(
+    Label == -1,
+    0, Label
+  ))
+y_cv <- X_cv %>% pull(Label)
+y_cv <- as.factor(y_cv)
+
+#binary_pct <- X_cv %>%
+#              count(Label) %>%
+#              summarise(pct = 100*n/nrow(X_cv))
+#rownames(binary_pct) <- c("Not Cloud", "Cloud")
+#colnames(binary_pct) <- c("% of pixels")
+#binary_pct %>%
+#  kable(digits = 3,
+#        caption = "Cloud vs Not Cloud Binary Percentages") %>%
+#  kable_styling(latex_options = "HOLD_position", full_width = F)
+```
+
+```{r corrplot, fig.width = 4, fig.height = 4}
+corrplot::corrplot(cor(X_cv[, 4:12]), type="upper", tl.col="black")
+```
+
+From these correlations, some trends stand out. All three of the "physical features" in the paper (NDAI, SD, CORR), are positively correlated with label, which indicates that *higher* values of all three of these features are associated with a label of +1, meaning cloud cover. In contrast, however, four of the five given radiance angles show negative correlation with label, indicating that *lower* values of radiance are generally associated with cloud cover. We can also compare differences between the features in the two classes by considering the densities of the features separated by label:
+
+```{r density-plots, fig.height=3, fig.width=8}
+colors = c("clouds" = "deepskyblue", 
+           "noclouds" = "chocolate3",
+           "other" = "darkseagreen")
+
+g1 = ggplot() +
+  geom_density(aes(x = NDAI, color = "clouds", fill = "clouds"), 
+               data = data %>% filter(Label == 1), 
+               alpha = 0.6) +
+    geom_density(aes(x = NDAI, color = "noclouds", fill = "noclouds"), 
+               data = data %>% filter(Label == -1), 
+               alpha = 0.6) +
+    geom_density(aes(x = NDAI, color = "other", fill = "other"), 
+               data = data %>% filter(Label == 0), 
+               alpha = 0.6) +
+  labs(title = "NDAI",
+       x = element_blank(),
+       y = element_blank()) +
+  scale_fill_manual(values = colors) +
+  scale_color_manual(values = colors) +
+  theme_minimal() + 
+  theme(legend.position = "none")
+
+g2 = ggplot() +
+  geom_density(aes(x = log(SD), color = "clouds", fill = "clouds"), 
+               data = data %>% filter(Label == 1), 
+               alpha = 0.6) +
+    geom_density(aes(x = log(SD), color = "noclouds", fill = "noclouds"), 
+               data = data %>% filter(Label == -1), 
+               alpha = 0.6) +
+    geom_density(aes(x = log(SD), color = "other", fill = "other"), 
+               data = data %>% filter(Label == 0), 
+               alpha = 0.6) +
+  labs(title = "log(SD)",
+       x = element_blank(),
+       y = element_blank()) +
+  scale_fill_manual(values = colors) +
+  scale_color_manual(values = colors) +
+  theme_minimal() + 
+  theme(legend.position = "none")
+
+g3 = ggplot() +
+  geom_density(aes(x = CORR, color = "clouds", fill = "clouds"), 
+               data = data %>% filter(Label == 1), 
+               alpha = 0.6) +
+    geom_density(aes(x = CORR, color = "noclouds", fill = "noclouds"), 
+               data = data %>% filter(Label == -1), 
+               alpha = 0.6) +
+    geom_density(aes(x = CORR, color = "other", fill = "other"), 
+               data = data %>% filter(Label == 0), 
+               alpha = 0.6) +
+  labs(title = "CORR",
+       x = element_blank(),
+       y = element_blank()) +
+  scale_fill_manual(values = colors) +
+  scale_color_manual(values = colors) +
+  theme_minimal() + 
+  theme(legend.position = "none")
+
+g4 = ggplot() +
+  geom_density(aes(x = DF, color = "clouds", fill = "clouds"), 
+               data = data %>% filter(Label == 1), 
+               alpha = 0.6) +
+    geom_density(aes(x = DF, color = "noclouds", fill = "noclouds"), 
+               data = data %>% filter(Label == -1), 
+               alpha = 0.6) +
+    geom_density(aes(x = DF, color = "other", fill = "other"), 
+               data = data %>% filter(Label == 0), 
+               alpha = 0.6) +
+  labs(title = "DF",
+       x = element_blank(),
+       y = element_blank()) +
+  scale_fill_manual(values = colors) +
+  scale_color_manual(values = colors) +
+  theme_minimal() + 
+  theme(legend.position = "none")
+
+g5 = ggplot() +
+  geom_density(aes(x = CF, color = "clouds", fill = "clouds"), 
+               data = data %>% filter(Label == 1), 
+               alpha = 0.6) +
+    geom_density(aes(x = CF, color = "noclouds", fill = "noclouds"), 
+               data = data %>% filter(Label == -1), 
+               alpha = 0.6) +
+    geom_density(aes(x = CF, color = "other", fill = "other"), 
+               data = data %>% filter(Label == 0), 
+               alpha = 0.6) +
+  labs(title = "CF",
+       x = element_blank(),
+       y = element_blank()) +
+  scale_fill_manual(values = colors) +
+  scale_color_manual(values = colors) +
+  theme_minimal() + 
+  theme(legend.position = "none")
+
+g6 = ggplot() +
+  geom_density(aes(x = BF, color = "clouds", fill = "clouds"), 
+               data = data %>% filter(Label == 1), 
+               alpha = 0.6) +
+    geom_density(aes(x = BF, color = "noclouds", fill = "noclouds"), 
+               data = data %>% filter(Label == -1), 
+               alpha = 0.6) +
+    geom_density(aes(x = BF, color = "other", fill = "other"), 
+               data = data %>% filter(Label == 0), 
+               alpha = 0.6) +
+  labs(title = "BF",
+       x = element_blank(),
+       y = element_blank()) +
+  scale_fill_manual(values = colors) +
+  scale_color_manual(values = colors) +
+  theme_minimal() + 
+  theme(legend.position = "none")
+
+g7 = ggplot() +
+  geom_density(aes(x = AF, color = "clouds", fill = "clouds"), 
+               data = data %>% filter(Label == 1), 
+               alpha = 0.6) +
+    geom_density(aes(x = AF, color = "noclouds", fill = "noclouds"), 
+               data = data %>% filter(Label == -1), 
+               alpha = 0.6) +
+    geom_density(aes(x = AF, color = "other", fill = "other"), 
+               data = data %>% filter(Label == 0), 
+               alpha = 0.6) +
+  labs(title = "AF",
+       x = element_blank(),
+       y = element_blank()) +
+  scale_fill_manual(values = colors) +
+  scale_color_manual(values = colors) +
+  theme_minimal() + 
+  theme(legend.position = "none")
+
+g8 = ggplot() +
+  geom_density(aes(x = AN, color = "clouds", fill = "clouds"), 
+               data = data %>% filter(Label == 1), 
+               alpha = 0.6) +
+    geom_density(aes(x = AN, color = "noclouds", fill = "noclouds"), 
+               data = data %>% filter(Label == -1), 
+               alpha = 0.6) +
+    geom_density(aes(x = AN, color = "other", fill = "other"), 
+               data = data %>% filter(Label == 0), 
+               alpha = 0.6) +
+  labs(title = "AN",
+       x = element_blank(),
+       y = element_blank()) +
+  scale_fill_manual(values = colors) +
+  scale_color_manual(values = colors) +
+  theme_minimal() + 
+  theme(legend.position = "none")
+
+grid.arrange(g1,g2,g3,g4,g5,g6,g7,g8,nrow=2)
+```
+These density plots reinforce the same ideas seen in the correlations above. In the three "physical features", the "cloud" labeled points have densities higher than the "non-cloud" labeled points, and conversely, for four of the five radiances (all except for DF), the bulk of the density for the "non-cloud" labeled points is above that of the cloud labeled points. Interestingly, the radiance densities for the "cloud" labeled points are generally unimodal, whereas the radiances for the "non-cloud" labeled points are generally bimodal, with the larger mode above the cloud density mode and the smaller mode below. This helps explain the need for the physical features; the radiances are less uniformly separable, and thus have less predictive power than the physical features. 
+
+# Preparation
+
+## Data Split
+
+In splitting the dataset into training, validation, and test subsets, it is important to preserve the structure of the data, that is, that the observations are denoted by their X and Y spatial coordinates, and any split of the data should preserve this spatial structure as much as possible. One method for doing so is to carve each image up into some $n^2$ blocks, and then to randomly permute the block identifiers, the range of numbers from 1 to $3n^2$, and then take splits from the random block permutation. Such a method does preserve the spatial structure of the data, as each point is in a set with some (or all if not an edge) of the points around it. The random permutation also ensures that, while the spatial structure of points relative to each other is preserved, the image structure is not, such that the orientation and structure of a individual image is not incorporated in the model.
+
+A second method for splitting the data into three sets is to assign all data from images 1 and 3 to the training data. Then we can split the image 2 data in half, assigning half to the validation and test sets respectively. By doing so, we retain the majority of the data for training to better fit our classifiers. In addition, by splitting image 2 in half, we still retain the spatial structure of the data for the validation and test sets. We believe that image 2 is the best choice to split in half for our validation and test sets because each half contains samples from both classes. Looking at the validation and test set maps below, we see that each set contains a sizable number of cloud and non-cloud samples. Since we would like to incorporate this image split method with the cross validation function, we will incorporate the validation data which is half of image 2 into the training data and use the validation data along with the training data from images 1 and 3 to train and validate on K folds of data before checking how the trained model will perform on the separate test data from image 2.
+
+```{r val-test-maps, fig.width=8, fig.height = 3}
+split_ims <- image_split(data[,-4], data[,4], K=8)
+
+val_map <- ggplot(data=split_ims$val_data, aes(x=X, y=Y,
+                                               color=factor(split_ims$val_labels))) +
+  geom_point() +
+  coord_quickmap(expand = F, clip = "on") +
+  labs(title = "Validation Set") +
+  scale_color_manual(labels = c("Not Cloud", "Unlabeled", "Cloud"),
+                     values = c("chocolate3", "darkseagreen", "deepskyblue"),
+                     name = "Label") +
+  theme_void() +
+  theme(legend.position = "none")
+test_map <- ggplot(data=split_ims$test_data, aes(x=X, y=Y,
+                                            color=factor(split_ims$test_labels))) +
+  geom_point() +
+  coord_quickmap(expand = F, clip = "on") +
+  labs(title = "Test Set") +
+  scale_color_manual(labels = c("Not Cloud", "Unlabeled", "Cloud"),
+                     values = c("chocolate3", "darkseagreen", "deepskyblue"),
+                     name = "Label") +
+  theme_void() +
+  theme(legend.position = "none")
+grid.arrange(test_map, val_map, leg, nrow=1)
+```
+
+## Baseline
+
+Before splitting the data, we first remove all observations with 0 labels which correspond to the unlabeled points because we are primarily focused on detecting the presence of clouds or no clouds in the images. Therefore, a binary classification task between the 1 and -1 labels is a more appropriate approach to this problem. Even if we approached this problem as a multi-classification task between 3 different labels and were predicting all 3 labels accurately, predicting the unlabeled points accurately is largely meaningless in the context of detecting the presence of clouds or no clouds in the images.
+
+We can now split the data using the methods outlined above and run a "classifier" which just sets all points to label $-1$, indicating cloudlessness. For the block splitting method, we split each image into 64 blocks, for a total of 192 blocks, of which 32 are for testing, 30 are for validation, and 130 are for training. This method gives a validation set misclassification rate of $40.6\%$ and a test set misclassification rate of $43.2\%$, which is about in line with the overall rate of $-1$ labels being $59.4\%$ and $56.8\%$ respectively. This classifier would yield high accuracy if the image data was unbalanced to be mostly cloudless images, but in a scenario where a slight majority of points are labeled $-1$, it is not a strong classifier.
+
+
+```{r block-split-baseline}
+set.seed(521)
+
+binary_data = data %>%
+  filter(Label != 0)
+
+tl = binary_data %>%
+  pull(Label)
+td = binary_data %>%
+  dplyr::select(-Label)
+
+
+td$block = rep(0, nrow(td))
+labels_block = numeric()
+ims = distinct(td %>% dplyr::select(image)) %>% pull(image)
+snum = 0
+  
+for (im in ims){
+  xvals = td %>%
+    filter(image == im) %>%
+    pull(X) %>%
+    unique()
+  yvals = td %>%
+    filter(image == im) %>%
+    pull(Y) %>%
+    unique()
+  
+  xsplit = split(sort(xvals),
+                 cut(seq_along(xvals),
+                     8,
+                     labels = FALSE))
+  
+  ysplit = split(sort(yvals),
+                 cut(seq_along(yvals),
+                     8,
+                     labels = FALSE))
+
+  for (xs in xsplit){
+    for (ys in ysplit){
+      snum = snum + 1
+      td = td %>%
+        mutate(block = ifelse(
+          ((image == im) & (X %in% xs) & (Y %in% ys)), 
+          snum, block))
+      labels_block = c(labels_block, 
+                            rep(snum, 
+                                nrow(td %>%
+                                       filter((image == im) & 
+                                                (X %in% xs) & 
+                                                (Y %in% ys)))))
+    }
+  }
+}
+
+#Splitting the blocks
+bks = sample(seq.int(from = 1, to = snum, by = 1))
+
+tnum = floor(length(bks)/6)
+tmin = snum - tnum
+
+block_train_labels = tl[labels_block %in% bks[1:(tmin-30)]]
+block_valid_labels = tl[labels_block %in% bks[(tmin-29):tmin]]
+block_test_labels = tl[labels_block %in% bks[(tmin+1):snum]]
+
+block_train = td %>% filter(block %in% bks[1:(tmin-30)])
+block_valid = td %>% filter(block %in% bks[(tmin-29):tmin])
+block_test = td %>% filter(block %in% bks[(tmin+1):snum])
+
+#mean(block_valid_labels == 1)
+#mean(block_test_labels == 1)
+
+```
+
+Next, we will run this trivial classifier on our image splitting method where we split image 2 in half for the validation and test sets. This method gives a validation set misclassification rate of $21.1\%$ and a test set misclassification rate of $36.4\%$, which is about in line with the overall rate of $-1$ labels being $78.9\%$ and $63.6\%$ respectively in the binary dataset (with unclassified points removed). Once again, this trivial classifier will have high average accuracy if the majority of the points are $-1$ (cloudless). Since most of the points are cloudless in the validation and test sets, the trivial classifier appears to be fairly accurate even though it is just predicting the majority class each time.
+
+```{r baseline-image-split}
+binary_image_split <- image_split(X_cv, y_cv, K = 8)
+
+val_labels <- binary_image_split$val_labels
+val_trivial <- rep(0, length(val_labels))
+#print(sum(val_labels == 0)/length(val_labels))
+#print(sum(val_trivial != val_labels)/length(val_trivial))
+
+test_labels <- binary_image_split$test_labels
+test_trivial <- rep(0, length(test_labels))
+#print(sum(test_labels == 0)/length(test_labels))
+#print(sum(test_trivial != test_labels)/length(test_trivial))
+```
+
+## First Order Importance
+
+In general, the best set of features should include features that are both strongly correlated with the response, label, and weakly correlated with each other. Looking at the correlation plot in the Exploratory Data Analysis section, NDAI and CORR are fairly strongly correlated with label and are fairly weakly correlated with each other. Although SD is weakly correlated with CORR which would make it a good feature to include with CORR, it may not be preferable because it is strongly correlated with NDAI and weakly correlated with label. Looking at scatter plots of the 3 combinations of these 3 variables below, we see that the -1 and 1 labels corresponding to the non-cloud and cloud labels are more easily separated with NDAI and CORR or with log(SD) and CORR. Therefore, we believe that NDAI and CORR are the best 2 features to select out of the 3 constructed physical features because they are strongly correlated with label, fairly weakly correlated with each other, and lead to more separable groups of labels.
+
+```{r scatter-compare, fig.width=8, fig.height=3}
+scatter1 <- ggplot() +
+  geom_point(aes(x=X_cv$NDAI, y=log(X_cv$SD), color=y_cv),
+             alpha=0.5) +
+  labs(x="NDAI", y="log SD") +
+  scale_color_manual(labels = c("Not Cloud", "Cloud"),
+                     values = c("chocolate3", "deepskyblue")) +
+  theme(legend.position = "none")
+scatter2 <- ggplot() +
+  geom_point(aes(x=X_cv$NDAI, y=X_cv$CORR, color=y_cv),
+             alpha=0.5) +
+  labs(x="NDAI", y="CORR") +
+  scale_color_manual(labels = c("Not Cloud", "Cloud"),
+                     values = c("chocolate3", "deepskyblue")) +
+  theme(legend.position = "none")
+scatter3 <- ggplot() +
+  geom_point(aes(x=log(X_cv$SD), y=X_cv$CORR, color=y_cv),
+             alpha=0.5) +
+  labs(x="log SD", y="CORR",
+       color="Label") +
+  scale_color_manual(labels = c("Not Cloud", "Cloud"),
+                     values = c("chocolate3", "deepskyblue"))
+
+bin_leg = ggpubr::get_legend(scatter3)
+
+scatter3 = scatter3 +
+  theme(legend.position="none")
+
+grid.arrange(scatter1, scatter2, scatter3, bin_leg,
+             nrow=1, ncol=4, widths = c(1,1,1,.5))
+```
+
+Now looking at the radiance angles, the most promising features include BF, AF, and AN because they are all fairly highly correlated with label. Although the correlation of BF with label is slightly weaker, it has a weaker correlation with CORR which may make it a better feature to combine with NDAI and CORR.
+
+```{r mutual-information, message=FALSE}
+library(infotheo)
+mutual_info <- function(feature) {
+  mutinformation(y_cv, discretize(feature))
+}
+
+mi_table <- apply(X_cv[, 5:ncol(X_cv)], MARGIN=2, FUN=mutual_info)
+mi_table <- data.frame(t(mi_table))
+rownames(mi_table) <- "Entropy"
+mi_table %>%
+  kable(digits=3,
+        caption="Mutual Information with Label") %>%
+  kable_styling(latex_options="HOLD_position", full_width=F)
+```
+
+Above, we consider the mutual information between each feature and the response label. The entropy of the empirical probability distributions quantify the amount of information obtained about label when observing one of the features. NDAI is certainly a good feature to select because it has the highest mutual information with label. Although SD has a higher mutual information than CORR, since it is highly correlated with NDAI and CORR still has a high mutual information, we prefer CORR alongside NDAI. As expected, the BF, AF, and AN radiance angles have a higher mutual information with label than the DF and CF radiance angles. Since AF and AN only have slightly higher mutual information than BF, we may prefer the BF radiance angle because of its weaker correlation with CORR compared to the AF and AN radiance angles. The next table shows the mutual information between the combination of NDAI and CORR with BF, AF, and AN respectively to see which combination results in the greatest mutual information. The combination with BF results in the highest mutual information. This further justifies combining the BF radiance angle with NDAI and CORR because not only is it most weakly correlated with CORR, but it also gives the highest mutual information when in combination with NDAI and CORR.
+
+Therefore, we have chosen the 3 best features to be NDAI, CORR, and the BF radiance angle because they are all fairly strongly correlated with the response label, they are only moderately correlated with each other, and they all have a relatively high mutual information with the response label.
+
+```{r mutual-information-2}
+mi_bf <- mutinformation(y_cv, discretize(X_cv[, c("NDAI", "CORR", "BF")]))
+mi_af <- mutinformation(y_cv, discretize(X_cv[, c("NDAI", "CORR", "AF")]))
+mi_an <- mutinformation(y_cv, discretize(X_cv[, c("NDAI", "CORR", "AN")]))
+
+mi_table2 <- data.frame(c(mi_bf, mi_af, mi_an))
+mi_table2 <- data.frame(t(mi_table2))
+rownames(mi_table2) <- "Entropy"
+colnames(mi_table2) <- c("NDAI, CORR, BF", "NDAI, CORR, AF", "NDAI, CORR, AN")
+mi_table2 %>%
+  kable(digits=3,
+        caption="Mutual Information with Label") %>%
+  kable_styling(latex_options="HOLD_position", full_width=F)
+```
+
+## Generic Cross-Validation
+
+We then wrote a function that allows us to pass in the name of a trivial classifier (or a function call to such a classifier), and a number of folds, and outputs the $K$-fold Cross-validation misclassification rate on the training data provided using the classifier. The function uses the block splitting method described in Section 2(a), with $64$ blocks per image. It then partitions the blocks into $K$ groups, and, for each partition, treats that partition as a validation set while training the classifier on the other $k-1$ partitions. Finally, the function returns the mean of the misclassification rates of the classifiers predicting on each of the $k$ validation partitions. The function also allows for optional arguments, which are then passed to the generic classifier, so as to allow for classifiers to be modified from their generic versions.
+
+The function also allows for the image splitting method described in Section 2(a). Taking images 1 and 3 from the training set and half of image 2 from the validation set, it splits these 2.5 images into K blocks which become the $K$ folds used to train and validate the model in the function. The other half of image 2 is set aside as the test set so that after cross validation, the classifier is trained on the whole training set and the validation set before predicting and evaluating the performance on the test set.
+
+# Modeling
+
+All together, we considered 9 different classifiers, of which 6 are presented here. The classifiers we used were Logistic Regression (LR), Linear Dicriminant Analysis (LDA), Quadratic Discriminant Analysis (QDA), a decision tree, a random forest, and Gradient Boosting (AdaBoost). Not considered here are Multi-layer Perceptrons and K-nearest neighbors, as well as Support Vector Machines, which we attempted but which were computationally infeasible. We fit all classifiers using both the split methods described above, with the results given below:
+
+```{r image-split-CVs, include=FALSE, warning=FALSE, message=FALSE}
+cv_lr <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
+                  K = 8, split = "image", type = "response",
+                  family="binomial")
+cv_lda <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "lda",
+                   K = 8, split = "image", type = "class")
+cv_qda <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "qda",
+                   K = 8, split = "image", type = "class")
+cv_tree <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "tree",
+                   K = 8, split = "image", type = "vector")
+cv_rf <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "randomForest",
+                  K = 8, split = "image", type = "prob",
+                  ntree = 5)
+cv_gbm <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
+                   K = 8, split = "image", type = "response",
+                   distribution = "adaboost", bag.fraction = 1)
+```
+
+```{r image-split-baseline, include=FALSE}
+im_block_labels <- binary_image_split$training_data %>%
+  group_by(block, Label) %>%
+  summarise(n = n())
+
+image_split_baseline <- c()
+for (b in unique(im_block_labels$block)) {
+  freqs <- im_block_labels %>%
+    filter(block == b) %>%
+    summarise(freq = n/sum(n)) %>%
+    pull(freq)
+  image_split_baseline <- c(image_split_baseline, freqs[2])
+}
+image_split_baseline <- c(image_split_baseline,
+                          mean(image_split_baseline))
+image_split_baseline <- c(image_split_baseline,
+                          sum(binary_image_split$test_labels != 0)/
+                            length(binary_image_split$test_labels))
+```
+
+```{r image-split-comparisons, message=FALSE}
+model_comp <- cbind(cv_lr$CV_loss, cv_lda$CV_loss, 
+                    cv_qda$CV_loss, cv_tree$CV_loss,
+                    cv_rf$CV_loss, cv_gbm$CV_loss,
+                    image_split_baseline)
+colnames(model_comp) <- c("LR", "LDA", "QDA", "Tree", "RF", "GBM",
+                          "Baseline")
+model_comp %>%
+  kable(digits = 3,
+        caption = "Image Split Model Comparison") %>%
+  kable_styling(latex_options = "HOLD_position", full_width = F)
+```
+
+```{r image-ROC-cutoffs}
+lr_index <- which.max(cv_lr$roc_obj$specificities + cv_lr$roc_obj$sensitivities)
+lda_index <- which.max(cv_lda$roc_obj$specificities + cv_lda$roc_obj$sensitivities)
+qda_index <- which.max(cv_qda$roc_obj$specificities + cv_qda$roc_obj$sensitivities)
+tree_index <- which.max(cv_tree$roc_obj$specificities + cv_tree$roc_obj$sensitivities)
+rf_index <- which.max(cv_rf$roc_obj$specificities + cv_rf$roc_obj$sensitivities)
+gbm_index <- which.max(cv_gbm$roc_obj$specificities + cv_gbm$roc_obj$sensitivities)
+```
+
+```{r image-ROC-comparison, fig.width=8, fig.height = 3.5}
+ggplot() +
+  # lr ROC
+  geom_line(aes(x = 1 - cv_lr$roc_obj$specificities,
+                y = cv_lr$roc_obj$sensitivities,
+                color = "lr")) +
+  # lr cutoff
+  geom_point(aes(x = 1 - cv_lr$roc_obj$specificities[lr_index],
+                 y = cv_lr$roc_obj$sensitivities[lr_index],
+                 color = "cutoff"),
+             shape = 8) +
+  # lda ROC
+  geom_line(aes(x = 1 - cv_lda$roc_obj$specificities,
+                y = cv_lda$roc_obj$sensitivities,
+                color = "lda")) +
+  # lda cutoff
+  geom_point(aes(x = 1 - cv_lda$roc_obj$specificities[lda_index],
+                 y = cv_lda$roc_obj$sensitivities[lda_index],
+                 color = "cutoff"),
+             shape = 8) +
+  # qda ROC
+  geom_line(aes(x = 1 - cv_qda$roc_obj$specificities,
+                y = cv_qda$roc_obj$sensitivities,
+                color = "qda")) +
+  # qda cutoff
+  geom_point(aes(x = 1 - cv_qda$roc_obj$specificities[qda_index],
+                 y = cv_qda$roc_obj$sensitivities[qda_index],
+                 color = "cutoff"),
+             shape = 8) +
+  # tree ROC
+  geom_line(aes(x = 1 - cv_tree$roc_obj$specificities,
+                y = cv_tree$roc_obj$sensitivities,
+                color = "tree")) +
+  # tree cutoff
+  geom_point(aes(x = 1 - cv_tree$roc_obj$specificities[tree_index],
+                 y = cv_tree$roc_obj$sensitivities[tree_index],
+                 color = "cutoff"),
+             shape = 8) +
+  # rf ROC
+  geom_line(aes(x = 1 - cv_rf$roc_obj$specificities,
+                y = cv_rf$roc_obj$sensitivities,
+                color = "rf")) +
+  # rf cutoff
+  geom_point(aes(x = 1 - cv_rf$roc_obj$specificities[rf_index],
+                 y = cv_rf$roc_obj$sensitivities[rf_index],
+                 color = "cutoff"),
+             shape = 8) +
+  # gbm ROC
+  geom_line(aes(x = 1 - cv_gbm$roc_obj$specificities,
+                y = cv_gbm$roc_obj$sensitivities,
+                color = "gbm")) +
+  # gbm cutoff
+  geom_point(aes(x = 1 - cv_gbm$roc_obj$specificities[gbm_index],
+                 y = cv_gbm$roc_obj$sensitivities[gbm_index],
+                 color = "cutoff"),
+             shape = 8) +
+  labs(title = "Image Split Test ROC",
+       x = "1 - Specificity", y = "Sensitivity",
+       color = "ROC curves") +
+  scale_color_manual(labels = c("Cutoffs",
+                                paste0("GBM AUC = ", round(cv_gbm$roc_obj$auc, 3)),
+                                paste0("LDA AUC = ", round(cv_lda$roc_obj$auc, 3)),
+                                paste0("LR AUC = ", round(cv_lr$roc_obj$auc, 3)),
+                                paste0("QDA AUC = ", round(cv_qda$roc_obj$auc, 3)),
+                                paste0("RF AUC = ", round(cv_rf$roc_obj$auc, 3)),
+                                paste0("Tree AUC = ", round(cv_tree$roc_obj$auc, 3))),
+                     values = c("black",
+                                "red",
+                                "orange",
+                                "yellow",
+                                "green",
+                                "blue",
+                                "purple"))
+```
+
+Looking at the image split classifiers, all 6 models perform relatively well, with average and test CV losses in the range of 10%-17%. Of these, the best performing model by average CV loss is the AdaBoost model, and the best performing model on the test set is the single decision tree, followed by QDA. Looking at the ROC curves, all 6 models have AUC around 0.900, with the best AUC from the AdaBoost model.
+
+```{r block-baseline-cv}
+bsplit = block_split(X_cv, y_cv, K=8, seed=521)
+btraining_data = bsplit$training_data
+blabels = bsplit$labels
+bsnum = bsplit$snum
+btraining_labels = bsplit$training_data %>% pull(Label)
+
+#Splitting the blocks
+bbks = seq.int(from = 1, to = bsnum, by = 1)
+bbks = sample(bbks)
+btnum = floor(length(bbks)/6) #Set ~1/6 for testing
+btest_data = btraining_data %>%
+  filter(block %in% bbks[((length(bbks)-btnum)+1):length(bbks)])
+btest_labels = btraining_labels[(blabels %in% 
+                                   bbks[((length(bbks)-btnum)+1):length(bbks)])]
+bbks = bbks[1:(length(bbks)-btnum)]
+btraining_data = btraining_data %>%
+  filter(block %in% bbks)
+btraining_labels = btraining_labels[blabels %in% bbks]
+blabels = blabels[blabels %in% bbks]
+folds_b = createFolds(bbks, k = 8)
+
+block_split_baseline <- c()
+for (f in folds_b) {
+  y = btraining_labels[blabels %in% f]
+  freq <- mean(y != 0)
+  block_split_baseline <- c(block_split_baseline, freq)
+}
+block_split_baseline <- c(block_split_baseline,
+                          mean(block_split_baseline))
+block_split_baseline <- c(block_split_baseline,
+                          sum(btest_labels != 0)/
+                            length(btest_labels))
+```
+
+```{r block-split-CVs, message=FALSE}
+cv_lr_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "glm",
+                  K = 8, split = "block", type = "response",
+                  family="binomial")
+cv_lda_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "lda",
+                  K = 8, split = "block", type = "class")
+cv_qda_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "qda",
+                  K = 8, split = "block", type = "class")
+cv_tree_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "tree",
+                  K = 8, split = "block", type = "vector")
+cv_rf_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "randomForest",
+                  K = 8, split = "block", type = "prob",
+                  ntree = 5)
+cv_gbm_b <- CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
+                  K = 8, split = "block", type = "response",
+                  distribution = "adaboost", bag.fraction = 1)
+
+model_comp_b <- cbind(cv_lr_b$CV_loss, cv_lda_b$CV_loss, 
+                      cv_qda_b$CV_loss, cv_tree_b$CV_loss,
+                      cv_rf_b$CV_loss, cv_gbm_b$CV_loss,
+                      block_split_baseline)
+colnames(model_comp_b) <- c("LR", "LDA", "QDA", "Tree", 
+                            "RF", "GBM", "Baseline")
+model_comp_b %>%
+  kable(digits = 3,
+        caption = "Block Split Model Comparison") %>%
+  kable_styling(latex_options = "HOLD_position", full_width = F)
+```
+
+```{r block-ROC-cutoffs}
+lr_b_index <- which.max(cv_lr_b$roc_obj$specificities + cv_lr_b$roc_obj$sensitivities)
+lda_b_index <- which.max(cv_lda_b$roc_obj$specificities + cv_lda_b$roc_obj$sensitivities)
+qda_b_index <- which.max(cv_qda_b$roc_obj$specificities + cv_qda_b$roc_obj$sensitivities)
+tree_b_index <- which.max(cv_tree_b$roc_obj$specificities + cv_tree_b$roc_obj$sensitivities)
+rf_b_index <- which.max(cv_rf_b$roc_obj$specificities + cv_rf_b$roc_obj$sensitivities)
+gbm_b_index <- which.max(cv_gbm_b$roc_obj$specificities + cv_gbm_b$roc_obj$sensitivities)
+```
+
+```{r block-ROC-comparison, fig.width=8, fig.height=3.5}
+ggplot() +
+  # lr ROC
+  geom_line(aes(x = 1 - cv_lr_b$roc_obj$specificities,
+                y = cv_lr_b$roc_obj$sensitivities,
+                color = "lr")) +
+  # lr cutoff
+  geom_point(aes(x = 1 - cv_lr_b$roc_obj$specificities[lr_b_index],
+                 y = cv_lr_b$roc_obj$sensitivities[lr_b_index],
+                 color = "cutoff"),
+             shape = 8) +
+  # lda ROC
+  geom_line(aes(x = 1 - cv_lda_b$roc_obj$specificities,
+                y = cv_lda_b$roc_obj$sensitivities,
+                color = "lda")) +
+  # lda cutoff
+  geom_point(aes(x = 1 - cv_lda_b$roc_obj$specificities[lda_b_index],
+                 y = cv_lda_b$roc_obj$sensitivities[lda_b_index],
+                 color = "cutoff"),
+             shape = 8) +
+  # qda ROC
+  geom_line(aes(x = 1 - cv_qda_b$roc_obj$specificities,
+                y = cv_qda_b$roc_obj$sensitivities,
+                color = "qda")) +
+  # qda cutoff
+  geom_point(aes(x = 1 - cv_qda_b$roc_obj$specificities[qda_b_index],
+                 y = cv_qda_b$roc_obj$sensitivities[qda_b_index],
+                 color = "cutoff"),
+             shape = 8) +
+  # tree ROC
+  geom_line(aes(x = 1 - cv_tree_b$roc_obj$specificities,
+                y = cv_tree_b$roc_obj$sensitivities,
+                color = "tree")) +
+  # tree cutoff
+  geom_point(aes(x = 1 - cv_tree_b$roc_obj$specificities[tree_b_index],
+                 y = cv_tree_b$roc_obj$sensitivities[tree_b_index],
+                 color = "cutoff"),
+             shape = 8) +
+  # rf ROC
+  geom_line(aes(x = 1 - cv_rf_b$roc_obj$specificities,
+                y = cv_rf_b$roc_obj$sensitivities,
+                color = "rf")) +
+  # rf cutoff
+  geom_point(aes(x = 1 - cv_rf_b$roc_obj$specificities[rf_b_index],
+                 y = cv_rf_b$roc_obj$sensitivities[rf_b_index],
+                 color = "cutoff"),
+             shape = 8) +
+  # gbm ROC
+  geom_line(aes(x = 1 - cv_gbm_b$roc_obj$specificities,
+                y = cv_gbm_b$roc_obj$sensitivities,
+                color = "gbm")) +
+  # gbm cutoff
+  geom_point(aes(x = 1 - cv_gbm_b$roc_obj$specificities[gbm_b_index],
+                 y = cv_gbm_b$roc_obj$sensitivities[gbm_b_index],
+                 color = "cutoff"),
+             shape = 8) +
+  labs(title = "Block Split Test ROC",
+       x = "1 - Specificity", y = "Sensitivity",
+       color = "ROC curves") +
+  scale_color_manual(labels = c("Cutoffs",
+                                paste0("GBM AUC = ", round(cv_gbm_b$roc_obj$auc, 3)),
+                                paste0("LDA AUC = ", round(cv_lda_b$roc_obj$auc, 3)),
+                                paste0("LR AUC = ", round(cv_lr_b$roc_obj$auc, 3)),
+                                paste0("QDA AUC = ", round(cv_qda_b$roc_obj$auc, 3)),
+                                paste0("RF AUC = ", round(cv_rf_b$roc_obj$auc, 3)),
+                                paste0("Tree AUC = ", round(cv_tree_b$roc_obj$auc, 3))),
+                     values = c("black",
+                                "red",
+                                "orange",
+                                "yellow",
+                                "green",
+                                "blue",
+                                "purple"))
+```
+
+Looking at the block split classifiers, all 6 models perform worse than their image split counterparts, but significantly better than the baseline model. All 6 classifiers produce average CV loss around 30%, with the AdaBoost model being best at just under 30%, and all perform better on the test dataset than the CV error, indicating that these classifiers are not overfit (and AdaBoost still performs best here). The ROC curves for these classifiers all have lower AUCs than those for image split, and are clustered closer to 0.77-0.8, with the best AUC being for LR at 0.809.
+
+Since specificity is the true negative rate and sensitivity is the true positive rate, we would like cutoff values on the ROC curves that maximize both of them. To obtain the cutoff value of each ROC curve, we sum the specificity and the sensitivity at each threshold and then pick the threshold that has the largest sum. By doing so, we pick the cutoff value for each model that maximizes both the true negative rate and the true positive rate.
+
+# Diagnostics
+
+## Diagnostics of AdaBoost
+
+Of the different classifiers we considered, one of the best performing ones was Generalized Boosted Models, specifically AdaBoost exponential loss, where 0 indicated cloudlessness (changed from -1 because some classifiers needed 0-1 binary outcomes) and 1 indicated clouds. In boosting models, there are 2 main hyperparameters we are focused on optimizing: the number of trees in the model, and a shrinkage parameter applied to the weights. To determine the optimal parameters, we can fit a cross-validated model on a hyperparameter grid and record the average cross-validation misclassification error.
+
+```{r hyperest-ntree-lr, eval=FALSE, message=FALSE}
+ntrees_orig = c(1, 5, 10, 20, 25, 40, 50, 60, 75, 80, 100, 
+                 120, 125, 140, 150, 160, 175, 180, 200, 
+                 225, 250, 275, 300, 350, 400)
+lr_orig = c(0.005, 0.01, 0.025, 0.0375, 0.05, 0.0625, 0.075, 0.1, 0.25, 0.5)
+
+outs = list()
+outs_b = list()
+
+for (t in ntrees_orig) {
+  for (l in lr_orig) {
+    mod = CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
+                    K = 8, split = "image", type = "response",
+                    distribution = "adaboost", bag.fraction = 1, n.trees = t,
+                    shrinkage = l)
+    mod_b = CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
+                    K = 8, split = "block", type = "response",
+                    distribution = "adaboost", bag.fraction = 1, n.trees = t,
+                    shrinkage = l)
+    outs = list.append(outs, mod$CV_loss)
+    outs_b = list.append(outs_b, mod_b$CV_loss)
+  }
+}
+
+outs = plyr::ldply(outs, data.frame)
+outs_b = plyr::ldply(outs_b, data.frame)
+
+
+folds = rep(c("F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "A", "T"), 
+            length(ntrees_orig)*length(lr_orig))
+ntrees = rep(ntrees_orig, each = 10*length(lr_orig))
+lr = rep(rep(lr_orig, each = 10), length(ntrees_orig))
+
+n_df = cbind(ntrees, lr, folds, outs_b, outs)
+
+colnames(n_df) = c("ntrees", "lr", "folds", "block", "image")
+
+write_csv(n_df, "parameter_estimation.csv")
+```
+
+```{r param_estim_plot, fig.width=8, fig.height=3}
+n_df = read_csv("parameter_estimation.csv")
+
+ng1 = n_df %>%
+  mutate(lr = as.factor(lr)) %>%
+  filter(folds %in% c("A", "T")) %>%
+  ggplot() +
+  geom_line(data = . %>% filter (folds == "A"), aes(x = ntrees, y = block, 
+                                                    group = lr,
+                                                    color = lr),
+            linewidth = .7) +
+  labs(title = "Block Split",
+       x = "Number of Trees Fit",
+       y = "Misclassification Error",
+       color = "Learning Rate") +
+  theme(legend.position = "None")
+
+ng2 = n_df %>%
+  mutate(lr = as.factor(lr)) %>%
+  filter(folds %in% c("A", "T")) %>%
+  ggplot() +
+  geom_line(data = . %>% filter (folds == "A"), aes(x = ntrees, y = image,
+                                                    group = lr,
+                                                    color = lr),
+            linewidth = .7) +
+  labs(title = "Image Split", 
+       x = "Number of Trees Fit",
+       y = element_blank(),
+       color = "Learning Rate")
+
+ng_leg = ggpubr::get_legend(ng2)
+
+ng2 = ng2 +
+  theme(legend.position = "none")
+
+grid.arrange(ng1,ng2, ng_leg ,nrow=1, widths = c(1,1,.5))
+```
+In total, 250 pairings of the hyperparameters were trained on both split methods, with 25 distinct values for the number of trees and 10 distinct learning rates. In the block split method, at higher numbers of trees, the best performing learning rate is 0.01 with around 275 trees. For image split, higher trees meant significantly better performance with the 0.01 learning rate, compared to the other learning rates. However, the best parameter pair, for both split methods, by average cross-validated loss was 50 trees with learning rate of 0.075. Going forward, this is the set of hyperparameters we will use for our model analysis.
+
+```{r best-gbm-training, message=FALSE, fig.width=8, fig.height=3}
+gbm_best = CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
+                    K = 8, split = "image", type = "response",
+                    distribution = "adaboost", bag.fraction = 1, n.trees = 50,
+                    shrinkage = 0.075, thresh = 0.59479)
+gbm_best_b = CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
+                    K = 8, split = "block", type = "response",
+                    distribution = "adaboost", bag.fraction = 1, n.trees = 50,
+                    shrinkage = 0.075, thresh = 0.23699)
+
+gbm_best_index <- which.max(gbm_best$roc_obj$specificities 
+                            + gbm_best$roc_obj$sensitivities)
+
+gbm_bestb_index <- which.max(gbm_best_b$roc_obj$specificities 
+                             + gbm_best_b$roc_obj$sensitivities)
+
+best_thresh = gbm_best$roc_obj$thresholds[gbm_best_index]
+best_thresh_b = gbm_best_b$roc_obj$thresholds[gbm_bestb_index]
+
+ggplot() +
+  geom_line(aes(x = 1 - gbm_best_b$roc_obj$specificities,
+                y = gbm_best_b$roc_obj$sensitivities,
+                color = "gbm")) +
+  geom_point(aes(x = 1 - gbm_best_b$roc_obj$specificities[gbm_bestb_index],
+                 y = gbm_best_b$roc_obj$sensitivities[gbm_bestb_index],
+                 color = "cutoff"),
+             shape = 8) +
+  geom_line(aes(x = 1 - gbm_best$roc_obj$specificities,
+                y = gbm_best$roc_obj$sensitivities,
+                color = "lda")) +
+  geom_point(aes(x = 1 - gbm_best$roc_obj$specificities[gbm_best_index],
+                 y = gbm_best$roc_obj$sensitivities[gbm_best_index],
+                 color = "cutoff"),
+             shape = 8) +
+  labs(title = "Best GBM Model Test ROC",
+       x = "1 - Specificity", y = "Sensitivity",
+       color = "ROC curves") +
+  scale_color_manual(labels = c("Cutoffs",
+                                paste0("GBM Block AUC = ", 
+                                       round(gbm_best_b$roc_obj$auc, 3)),
+                                paste0("GBM Image AUC = ",
+                                       round(gbm_best$roc_obj$auc, 3))),
+                     values = c("black",
+                                "purple",
+                                "orange")
+  )
+```
+
+```{r confusion-matrices}
+cmI = confusionMatrix(as.factor(gbm_best$test_preds), 
+                reference = gbm_best$test_labels)
+
+cmB = confusionMatrix(as.factor(gbm_best_b$test_preds), 
+                reference = gbm_best_b$test_labels)
+
+kable(cmI$table, caption = "Image Split") %>%
+  kable_styling(full_width = F, latex_options = "HOLD_position")
+
+kable(cmB$table, caption = "Block Split") %>%
+  kable_styling(full_width = F, latex_options = "HOLD_position")
+```
+
+Looking at the ROC curve, we choose a cutoff that maximizes the sum of the specificity and sensitivity, since the goal is to have a model that has both high sensitivity and high specificity. We can also determine the threshold for that cutoff, which for image split is $\alpha_i \approx 0.59479$ and for block split is $\alpha_b \approx 0.23699$. With these thresholds, we can also calculate confusion matrices on the test sets for each split method. Looking at the confusion matrix, the image split method returns a test set predictive accuracy of $86.9\%$, with a sensitivity of $82.7 \%$ and a specificity of $94.4 \%$. Most significantly, the positive predictive value of the model, with cloudlessness as the positive class, is $0.9624$, meaning that $96.24 \%$ of the points are predicted cloudless are actually cloudless. This suggests that the model is strong in that, if it predicts a pixel to be cloudless, it is very likely to actually be cloudless. In contrast, for the block split method, the test set predictive accuracy is $74.2 \%$, with a sensitivity of $76.2 \%$ and a specificity of $71.6\%$. Although weaker across the board than the image split model, the positive predictive value of the block split model is still $0.7796$, and the model is still stronger in predicting points to be cloudless.
+
+## Comparing Misclassification Errors
+
+```{r best-models, message=FALSE}
+i_gbm_final <- gbm_best
+b_gbm_final <- gbm_best_b
+```
+
+```{r image-preds-breaks}
+isplit_labeled <- rbind(binary_image_split$training_data, binary_image_split$test_data)
+
+isplit_labeled$preds <- rep(-2, nrow(isplit_labeled))
+isplit_labeled$response <- rep(-2, nrow(isplit_labeled))
+isplit_labeled$index <- seq(from = 1, to = nrow(isplit_labeled))
+
+image_y_breaks <- list()
+for (b in unique(isplit_labeled$block)) {
+  rows <- isplit_labeled %>%
+    filter(block == b) %>%
+    pull(index)
+  if (b == 0) {
+    isplit_labeled[rows, ] <- isplit_labeled %>%
+      filter(block == b) %>%
+      mutate(preds = i_gbm_final$test_preds) %>%
+      mutate(response = i_gbm_final$test_response_preds)
+  }
+  else {
+    isplit_labeled[rows, ] <- isplit_labeled %>%
+      filter(block == b) %>%
+      mutate(preds = i_gbm_final$cv_preds[[b]]) %>%
+      mutate(response = i_gbm_final$cv_response_preds[[b]])
+    
+    y_range <- isplit_labeled %>%
+      filter(block == b) %>%
+      pull(Y) %>%
+      unique()
+    image_y_breaks[[b]] <- c(min(y_range),
+                             max(y_range))
+  }
+}
+
+x_break <- image2 %>%
+  pull(X) %>%
+  unique() %>%
+  sort()
+x_right <- max(x_break)
+x_half <- median(x_break)
+
+isplit_labeled$confusion <- rep("U", nrow(isplit_labeled))
+isplit_labeled <- isplit_labeled %>%
+  mutate(confusion = case_when(
+    (Label == 1 & preds == 1) ~ "TP",
+    (Label == 0 & preds == 1) ~ "FP",
+    (Label == 0 & preds == 0) ~ "TN",
+    (Label == 1 & preds == 0) ~ "FN"
+  ))
+```
+
+```{r block-features-errors}
+btraining_data$preds <- rep(-2, nrow(btraining_data))
+btraining_data$response <- rep(-2, nrow(btraining_data))
+btraining_data$index <- seq(from = 1, to = nrow(btraining_data))
+
+btest_blocks <- btest_data %>%
+  pull(block) %>%
+  unique()
+for (f in 1:8) {
+  folds_b[[f]] <- folds_b[[f]][!folds_b[[f]] %in% btest_blocks]
+  rows <- btraining_data %>%
+    filter(block %in% folds_b[[f]]) %>%
+    pull(index)
+  btraining_data[rows, ] <- btraining_data %>%
+    filter(block %in% folds_b[[f]]) %>%
+    mutate(preds = b_gbm_final$cv_preds[[f]]) %>%
+    mutate(response = b_gbm_final$cv_response_preds[[f]])
+}
+
+b_cv <- btraining_data %>%
+  filter(preds != -2 & response != -2)
+b_cv$confusion <- rep("U", nrow(b_cv))
+b_cv <- b_cv %>%
+  mutate(confusion = case_when(
+    (Label == 1 & preds == 1) ~ "TP",
+    (Label == 0 & preds == 1) ~ "FP",
+    (Label == 0 & preds == 0) ~ "TN",
+    (Label == 1 & preds == 0) ~ "FN"
+  ))
+```
+
+```{r feature-bins}
+feat_bins <- list()
+for (i in c(5, 7, 10)) {
+  #print(colnames(isplit_labeled)[i])
+  #print(colnames(b_cv)[i])
+  name <- colnames(isplit_labeled)[i]
+  feat_bins[[name]] <- seq(from = min(min(isplit_labeled[, i]), min(b_cv[, i])),
+                           to = max(max(isplit_labeled[, i]), max(b_cv[, i])),
+                           length.out = 6)
+}
+
+isplit_labeled$`NDAI Range` <- rep("empty", nrow(isplit_labeled))
+b_cv$`NDAI Range` <- rep("empty", nrow(b_cv))
+isplit_labeled$`CORR Range` <- rep("empty", nrow(isplit_labeled))
+b_cv$`CORR Range` <- rep("empty", nrow(b_cv))
+isplit_labeled$`BF Range` <- rep("empty", nrow(isplit_labeled))
+b_cv$`BF Range` <- rep("empty", nrow(b_cv))
+
+feats <- c(5, 7, 10)
+ranges <- 18:20
+for(i in 1:3) {
+  for(b in 1:5) {
+    rows_im <- isplit_labeled %>%
+      filter_at(feats[i],
+                all_vars((. >= feat_bins[[i]][b]) & (. <= feat_bins[[i]][b+1]))) %>%
+      pull(index)
+    isplit_labeled[rows_im, ] <- isplit_labeled %>%
+      filter_at(feats[i],
+                all_vars((. >= feat_bins[[i]][b]) & (. <= feat_bins[[i]][b+1]))) %>%
+      mutate_at(.vars = ranges[i],
+                .funs = list(~ rep(paste0("[", signif(feat_bins[[i]][b], 3), ", ",
+                                          signif(feat_bins[[i]][b+1], 3), "]"),
+                                   length(rows_im))))
+    
+    rows_b <- b_cv %>%
+      filter_at(feats[i],
+                all_vars((. >= feat_bins[[i]][b]) & (. <= feat_bins[[i]][b+1]))) %>%
+      pull(index)
+    b_cv[rows_b, ] <- b_cv %>%
+      filter_at(feats[i],
+                all_vars((. >= feat_bins[[i]][b]) & (. <= feat_bins[[i]][b+1]))) %>%
+      mutate_at(.vars = ranges[i],
+                .funs = list(~ rep(paste0("[", signif(feat_bins[[i]][b], 3), ", ",
+                                          signif(feat_bins[[i]][b+1], 3), "]"),
+                                   length(rows_b))))
+  }
+}
+
+for(r in ranges) {
+  isplit_labeled[, r] <- as.factor(isplit_labeled[, r])
+  b_cv[, r] <- as.factor(b_cv[, r])
+}
+```
+
+```{r features-errors-tables}
+i_features_errors <- list()
+for (f in 18:20) {
+  i_features_errors[[f-17]] <- isplit_labeled %>%
+    filter(block != 0) %>%
+    group_by_at(f) %>%
+    summarise(Misclassification = sum(Label != preds)/n(),
+              P = sum(Label == 1),
+              FNR = sum(confusion == "FN")/sum(Label == 1),
+              N = sum(Label == 0),
+              FPR = sum(confusion == "FP")/sum(Label == 0))
+}
+
+b_features_errors <- list()
+for (f in 18:20) {
+  b_features_errors[[f-17]] <- b_cv %>%
+    group_by_at(f) %>%
+    summarise(Misclassification = sum(Label != preds)/n(),
+              P = sum(Label == 1),
+              FNR = sum(confusion == "FN")/sum(Label == 1),
+              N = sum(Label == 0),
+              FPR = sum(confusion == "FP")/sum(Label == 0))
+}
+i_features_errors[[1]] <- rbind(i_features_errors[[1]][2,], i_features_errors[[1]][1,],
+                                i_features_errors[[1]][3:5,])
+b_features_errors[[1]] <- rbind(b_features_errors[[1]][2,], b_features_errors[[1]][1,],
+                                b_features_errors[[1]][3:5,])
+i_features_errors[[2]] <- rbind(i_features_errors[[2]][2,], i_features_errors[[2]][1,],
+                                i_features_errors[[2]][3:5,])
+b_features_errors[[2]] <- rbind(b_features_errors[[2]][2,], b_features_errors[[2]][1,],
+                                b_features_errors[[2]][3:5,])
+i_features_errors[[3]] <- rbind(i_features_errors[[3]][3,], i_features_errors[[3]][5,],
+                                i_features_errors[[3]][1:2,], i_features_errors[[3]][4,])
+b_features_errors[[3]] <- rbind(b_features_errors[[3]][3,], b_features_errors[[3]][5,],
+                                b_features_errors[[3]][1:2,], b_features_errors[[3]][4,])
+for (f in 18:20) {
+  i_features_errors[[f-17]] <- i_features_errors[[f-17]] %>%
+    kable(digits = 3,
+          caption = paste0("Image Split ",
+                           colnames(isplit_labeled)[f],
+                           " Errors")) %>%
+    kable_styling(latex_options = "HOLD_position",
+                  full_width = F)
+  b_features_errors[[f-17]] <- b_features_errors[[f-17]] %>%
+    kable(digits = 3,
+          caption = paste0("Block Split ",
+                           colnames(b_cv)[f],
+                           " Errors")) %>%
+    kable_styling(latex_options = "HOLD_position",
+                  full_width = F)
+}
+```
+
+```{r features-errors-output}
+#grid.arrange(g1, g3, g6, nrow = 1)
+i_features_errors[[1]]
+b_features_errors[[1]]
+i_features_errors[[2]]
+b_features_errors[[2]]
+i_features_errors[[3]]
+b_features_errors[[3]]
+```
+
+Above are tables of error rates of the 3 best features over 5 equally sized bins of the feature values for each data splitting method. For each bin, we have the overall misclassification rate, the number of cloud labels, the false negative rate (FNR), the number of cloudless labels, and the false positive rate (FPR). As evidenced by the expert label densities for the NDAI and CORR features from the Exploratory Data Analysis section, the densities are well separated so that all 3 error rates over the 5 ranges of feature values reflect this.
+
+Both data splitting methods have increasing FPR and decreasing FNR as NDAI increases. This reinforces previous expectation because lower NDAI values correlate with a higher probability of cloudless labels so there are few cloud labels and many cloudless labels largely classified as cloudless, which reflects the high FNR and low FPR. As NDAI increases, the probability of observing cloud labels increases so there are more cloud labels and fewer cloudless labels, mostly classified as clouds. This is reflected the increasing FPR and decreasing FNR. We observe fairly high misclassification rates with many samples for the NDAI range $(0.633, 1.87)$ because this is about where both cloud and cloudless labels have high probability densities that intersect. The same pattern of increasing FPR and decreasing FNR is found as CORR increases, for the same reasons as NDAI. We observe a high misclassification rate of samples for the CORR range $(0.109, 0.344)$ because this is around where the cloud and cloudless densities for CORR intersect at high probability.
+
+The pattern is reversed for increastng BF, with decreasing FPR and increasing FNR. This align with our Exploratory Data Analysis densities of the expert labels for BF because at lower BF, there is higher density of cloud labels. Here, the labels are mostly cloud and a small number of cloudless points that are largely classified as clouds, giving the low FNR and high FPR. As BF increases, the probability of observing cloudless labels drastically increases. There are few cloud labels and many cloudless labels that are mostly classified as cloudless which reflects the increasing FNR and the decreasing FPR. We observe higher misclassification in the BF range $(197, 254)$ for block split because this is where the 2 label densities intersect at a high probability.
+
+```{r image-2-maps}
+i_maps_folds <- list()
+i_maps_response <- list()
+i_maps_confusion <- list()
+
+im2_y_half <- floor(median(unique(image2$Y)))
+im2_y_top <- max(unique(image2$Y))
+
+i_maps_folds[[2]] <- isplit_labeled %>%
+  filter(image == 2) %>%
+  ggplot(aes(x=X, y=Y, color=factor(Label))) +
+  geom_point() +
+  geom_vline(xintercept = x_half,
+             linetype = "dashed", color = "black") +
+  geom_segment(x = x_half, xend = x_right,
+               y = image_y_breaks[[4]][2], yend = image_y_breaks[[4]][2],
+               linetype = "dashed", color = "black") +
+  coord_quickmap(expand = F, clip = "on") +
+  labs(title = "Image 2", color = "Label") +
+  scale_color_manual(labels = c("Not Cloud", "Cloud"),
+                     values = c("chocolate3", "deepskyblue")) +
+  annotate("text", x = (floor(x_half/2)+30), y = im2_y_half,
+           label = "Test Set",
+           fontface = "bold") +
+  annotate("text", x = floor((x_half+x_right)/2),
+           y = floor(im2_y_half/2),
+           label = "Fold 4",
+           fontface = "bold") +
+  annotate("text", x = floor((x_half+x_right)/2),
+           y = floor((im2_y_half+im2_y_top)/2),
+           label = "Fold 5",
+           fontface = "bold") +
+  theme_void() +
+  theme(legend.position = "left")
+leg_folds <- ggpubr::get_legend(i_maps_folds[[2]])
+i_maps_folds[[2]] <- i_maps_folds[[2]] + theme(legend.position = "none")
+
+i_maps_response[[2]] <- isplit_labeled %>%
+  filter(image == 2) %>%
+  ggplot(aes(x=X, y=Y, color=response)) +
+  geom_point() +
+  geom_vline(xintercept = x_half,
+             linetype = "dashed", color = "red") +
+  geom_segment(x = x_half, xend = x_right,
+               y = image_y_breaks[[4]][2], yend = image_y_breaks[[4]][2],
+               linetype = "dashed", color = "red") +
+  coord_quickmap(expand = F, clip = "on") +
+  labs(color = "Pr (Label = Cloud)") +
+  theme_void() +
+  theme(legend.position = "none")
+
+i_maps_confusion[[2]] <- isplit_labeled %>%
+  filter(image == 2) %>%
+  ggplot(aes(x=X, y=Y, color=confusion)) +
+  geom_point() +
+  geom_vline(xintercept = x_half,
+             linetype = "dashed", color = "black") +
+  geom_segment(x = x_half, xend = x_right,
+               y = image_y_breaks[[4]][2], yend = image_y_breaks[[4]][2],
+               linetype = "dashed", color = "black") +
+  coord_quickmap(expand = F, clip = "on") +
+  labs(color = "Results") +
+  scale_color_manual(labels = c("FN", "FP", "TN", "TP"),
+                     values = c("deeppink", "darkviolet",
+                                "chocolate3", "deepskyblue")) +
+  theme_void() +
+  theme(legend.position = "none")
+```
+
+```{r image-1-3-maps}
+for (i in c(1, 3)) {
+  i_folds <- isplit_labeled %>%
+    filter(image == i) %>%
+    pull(block) %>%
+    unique()
+  i_folds <- sort(i_folds)
+
+fold_x <- x_half
+fold_y1 <- floor((image_y_breaks[[i_folds[1]]][1] + image_y_breaks[[i_folds[1]]][2])/2)
+fold_y2 <- floor((image_y_breaks[[i_folds[2]]][1] + image_y_breaks[[i_folds[2]]][2])/2)
+fold_y3 <- floor((image_y_breaks[[i_folds[3]]][1] + image_y_breaks[[i_folds[3]]][2])/2)
+  
+i_maps_folds[[i]] <- isplit_labeled %>%
+  filter(image == i) %>%
+  ggplot(aes(x=X, y=Y, color=factor(Label))) +
+  geom_point() +
+  geom_hline(yintercept = image_y_breaks[[i_folds[1]]][2],
+             linetype = "dashed",
+             color = "black") +
+  geom_hline(yintercept = image_y_breaks[[i_folds[2]]][2],
+             linetype = "dashed",
+             color = "black") +
+  coord_quickmap(expand = F, clip = "on") +
+  labs(title = paste0("Image ", i),
+       color = "Fold") +
+  scale_color_manual(values = c("chocolate3", "deepskyblue")) +
+  annotate("text", x = x_half, y = fold_y1,
+           label = paste0("Fold ", i_folds[1]),
+           fontface = "bold") +
+  annotate("text", x = x_half, y = fold_y2,
+           label = paste0("Fold ", i_folds[2]),
+           fontface = "bold") +
+  annotate("text", x = x_half, y = fold_y3,
+           label = paste0("Fold ", i_folds[3]),
+           fontface = "bold") +
+  theme_void() +
+  theme(legend.position = "none")
+
+i_maps_response[[i]] <- isplit_labeled %>%
+  filter(image == i) %>%
+  ggplot(aes(x=X, y=Y, color=response)) +
+  geom_point() +
+  geom_hline(yintercept = image_y_breaks[[i_folds[1]]][2],
+             linetype = "dashed",
+             color = "red") +
+  geom_hline(yintercept = image_y_breaks[[i_folds[2]]][2],
+             linetype = "dashed",
+             color = "red") +
+  coord_quickmap(expand = F, clip = "on") +
+  labs(color = "Pr (Label = Cloud)") +
+  theme_void()
+
+i_maps_confusion[[i]] <- isplit_labeled %>%
+  filter(image == i) %>%
+  ggplot(aes(x=X, y=Y, color=confusion)) +
+  geom_point() +
+  geom_hline(yintercept = image_y_breaks[[i_folds[1]]][2],
+             linetype = "dashed",
+             color = "black") +
+  geom_hline(yintercept = image_y_breaks[[i_folds[2]]][2],
+             linetype = "dashed",
+             color = "black") +
+  coord_quickmap(expand = F, clip = "on") +
+  labs(color = "Results") +
+  scale_color_manual(labels = c("FN", "FP", "TN", "TP"),
+                     values = c("deeppink", "darkviolet",
+                                "chocolate3", "deepskyblue")) +
+  theme_void()
+}
+blank <- ggplot() + theme_void()
+leg_response <- ggpubr::get_legend(i_maps_response[[1]])
+leg_confusion <- ggpubr::get_legend(i_maps_confusion[[1]])
+for (i in c(1, 3)) {
+  i_maps_response[[i]] <- i_maps_response[[i]] +
+    theme(legend.position="none")
+  i_maps_confusion[[i]] <- i_maps_confusion[[i]] +
+    theme(legend.position="none")
+}
+```
+
+The groups of maps below correspond to the 3 images using the image split method. Each group represents 1 image. The left-most map of each group visualizes the points that are assigned to each fold from the image split method. In image 2, the left half is assigned the test set, and the right half is split into folds 4 and 5. The middle map of each group visualizes the probability of each point being labeled cloud based on the cross validation response predictions for each fold or the test response predictions. Let us refer to these as the probability maps. The right-most map of each group visualizes whether each point is a true positive, true negative, false positive, or false negative. Let us refer to these as the confusion matrix maps.
+
+```{r image-maps-all, fig.height=5, fig.width = 8.5}
+obj1 = arrangeGrob(leg_folds, leg_response, leg_confusion,
+             nrow = 1, ncol = 3)
+obj2 = arrangeGrob(i_maps_folds[[1]], i_maps_response[[1]], i_maps_confusion[[1]],
+             nrow = 1, ncol = 3)
+obj3 = arrangeGrob(i_maps_folds[[2]], i_maps_response[[2]], i_maps_confusion[[2]],
+             nrow = 1, ncol = 3)
+obj4 = arrangeGrob(i_maps_folds[[3]], i_maps_response[[3]], i_maps_confusion[[3]],
+             nrow = 1, ncol = 3)
+
+grid.arrange(obj2, blank, obj3, obj4, blank, obj1, 
+             ncol = 3, nrow = 2, widths = c(1, 0.2, 1))
+```
+
+Based on the probability and confusion matrix maps, we observe that the image 1 predictions are most accurate. Image 1 has the largest number of expert labels provided so there are fewer gaps of unlabeled points, potentially allowing for better overall predictions. Conversely, image 3 has many large gaps of unlabeled points and has many regions with high misclassification rates. The probability and confusion matrix maps also suggest that misclassifications most often occur in regions where true cloud and cloudless labels are very close to each other. For example, the test set shows how a small cloudless region sandwiched between 2 larger cloud regions is almost completely misclassified as a cloud. This is less of a problem for a well labeled image like image 1, but even then there are false positives on the left side of fold 3 where a region of cloudless points practically borders a region of cloud points. Furthermore, the many false positives and false negatives around the bottom border of fold 1, left border of fold 4, and all fold borders of image 3 show that the predictions often misclassify at the borders of the split image blocks.
+
+## Finding a Better Classifier
+
+Looking at the results from part 4(a), AdaBoost is a strong classifier for predicting cloudless pixels, but a better classifier would have a negative predictive value (NPV) closer to the positive predictive value (PPV) of the model (for the image split the NPV was $19\%$ lower, and for the block split the NPV was $8\%$ lower). Looking at part 4(b), there are clusters of false positives and false negatives, but also there are clusters that have mixed positive/negative labels. A better classifier would recognize these clusters, and be equally effective at fold and image borders as internal to folds.
+Given these patterns, one better method could be to run a two-stage classifier. The first stage would be any classifier, such as the AdaBoost classifier above. The second classifier, then, would consider the assigned classes from the first classifier, as well as the confidence in those classes (the predicted probabilities), and would use heuristics to reclassify points based on their features as well as the classes of adjacent points. For example, a point which had a 70% probability of being cloudless, but which is surrounded by points that are 90% probability of having clouds, would be reclassified to be considered cloudy. If effective, this classifier would at least remove the instances of isolated False Positives and False Negatives, and though it would not help the large clusters of mislabeled points, if used in conjunction with a stronger boosting classifier, or one with a different loss function, would potentially result in a better overall classifier.
+
+## Comparing Split Methods
+
+Comparing the misclassification rates across different bins of feature values, we notice some differences between the image split method and the block split method. At the NDAI range $(-0.604,0.633)$, where the negative labels dominate, image split has a lower misclassification rate but a higher FNR because it predicts mostly negatives. Here, block split has a higher misclassification rate but lower FNR because it predicts more positive labels at the expense of increasing FPR. For the NDAI range $(0.633, 1.87)$, where positive labels dominate, block split has a lower misclassification rate but $100\%$ FPR because it predicts every point to be positive. While image split has a higher misclassification rate, it has a much lower FPR because it predicts some negative labels at the expense of increasing the FNR.
+
+In the CORR range $(0.109, 0.344)$, where negative labels dominate, image split has a lower misclassification rate but higher FNR because it predicts mostly negative labels. Block split here has a higher misclassification rate but lower FNR because it predicts more positive labels at the expense of increasing FPR. While image split is dominated by negative labels in the CORR range of $(-0.126, 0.109)$, block split has a fairly equal number of both labels. In the BF range of $(139, 197)$, where positive labels dominate, block split has a lower misclassification rate but higher FPR because it predicts mostly positive labels. Image split here has a higher misclassification rate but lower FPR because it predicts more negative labels at the expense of increasing FNR. In the BF range $(254, 312)$, where negative labels dominate, image split has a lower misclassification rate but higher FNR because most points are predicted negative. Here, block split has a higher misclassification rate but lower FNR because it predicts more positive labels at the expense of increasing the FPR. While image split has more negative labels in the BF range $(197, 254)$, block split has more positive labels.
+
+The differences in misclassificaion rate, FPR, and FNR between the two split methods could result from image split having a higher optimal threshold of 0.59479 and block split having a lower optimal threshold of 0.23699. The disparities in the number of positive and negative labels in of the feature value ranges may be attributable to how block split has blocks from multiple images in each fold while image split splits images into fewer, more contiguous blocks.
+
+Looking at the results from the hyperparameter optimization on the AdaBoost model, the differences in the split methods are immediately evident. With more than 100 trees, with every learning rate, image split returned a misclassification error approximately 15%-20% lower than the misclassification error from  block split. This was true for every model in part 3 as well. One possible explanation for this is that splitting the data into more blocks per image creates more violations of the data's spatial structure, since each block has 4 edges so there are more points not included with every point they are spatially adjacent to. When comparing misclassification errors, looking at the probability and confusion matrix maps of image split shows that the there is some misclassification at the fold borders. The high misclassification rate of image split at these borders suggests that misclassifications at borders may be further exacerbated in block split because there are many more violations of this spatial structure of the data. This could help explain the higher misclassification rates across the board for block split compared to image split.
+
+## Conclusion
+
+Using quantitative and visual Exploratory Data Analysis and First Order Importance, we determined the 3 best features to use for training and testing our cloud detection classification models. We proposed 2 methods of splitting the data for K-fold cross validation: block split and image split. Block split cuts each image into $n^2$ blocks before randomly assigning the blocks to $K$ different folds in cross-validation or to the test set. Image split splits image 1, image 3, and the right half of image 2 into $K$ blocks for cross validation and preserves the left half of image 2 for the test set. After defining our data splitting and cross validation schemes, we compared the cross-validation and test losses for 6 different models using both split methods. We also displayed ROC curves with the optimal threshold for all 12 models. Both split methods suggested that Generalized Boosted Models with AdaBoost loss provided the highest prediction accuracy while best fitting the data. We then tuned the AdaBoost model, using a hyperparameter grid search of the number of trees and the shrinkage, to find the optimal hyperparameters, 50 trees and a shrinkage of 0.075, which matched for both split methods. We assessed the performance of the optimal model using updated ROC curves and confusion matrices. Finally, we explored misclassification patterns across feature value ranges and image regions. These diagnostics provided some insight into possible better future classifiers and how the different split methods impacted our results.
+
+# References
