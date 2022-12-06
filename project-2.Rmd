@@ -3,6 +3,7 @@ title: "STA 521 Project 2"
 author: "Eli Gnesin (ejg45) & Caleb Woo (csw57)"
 date: "2022-12-06"
 number-sections: true
+geometry: "left=1.5cm,right=1.5cm,top=1.5cm,bottom=2cm"
 bibliography: references.bib
 output: pdf_document
 ---
@@ -24,7 +25,6 @@ library(kableExtra)
 library(knitr)
 library(caret)
 library(tree)
-library(rpart)
 library(tidymodels)
 library(MASS)
 library(tidyr)
@@ -83,7 +83,7 @@ class_count %>%
   kable_styling(latex_options = "HOLD_position", full_width = F)
 ```
 
-```{r maps}
+```{r maps, fig.width = 8, fig.height = 3}
 map1 <- ggplot(data=image1, aes(x=X, y=Y, color=factor(Label))) +
   geom_point() +
   coord_quickmap(expand = F, clip = "on") +
@@ -113,7 +113,7 @@ leg = ggpubr::get_legend(map3)
 map3 = map3 +
   theme(legend.position = "none")
 
-grid.arrange(map1, map2, map3, leg, nrow=1)
+grid.arrange(map1, map2, map3, leg, nrow=1, widths = c(1,1,1,0.5))
 ```
 
 Similar to the ELCM-QDA results from the paper, we observe many ambiguous and unlabeled points around the cloud boundaries which separate the cloud pixels from the non-cloud pixels. An i.i.d. assumption for the samples cannot be justified for this dataset because individual pixels seem to depend on the pixels around it. If the data appeared to be i.i.d. we would expect a random scatter of pixels at any given region of an image. However, we observe clear spatial trends where cloud pixels are near other cloud pixels, unlabeled pixels border the clouds, and non-cloud pixels are near other non-cloud pixels. Therefore, individual pixels are essentially meaningless outside of the context of nearby pixels so we cannot make an i.i.d. assumption on the data.
@@ -122,7 +122,7 @@ Similar to the ELCM-QDA results from the paper, we observe many ambiguous and un
 
 We now continue with a short exploration of the data itself. First, we look at the pairwise correlations between the features, excluding the coordinates:
 
-```{r corrplot}
+```{r corrplot, fig.width = 4, fig.height = 4}
 corrplot::corrplot(cor(data[,4:12]), type="upper", tl.col="black")
 ```
 
@@ -289,7 +289,7 @@ In splitting the dataset into training, validation, and test subsets, it is impo
 
 A second method for splitting the data into three sets is to assign all data from images 1 and 3 to the training data. Then we can split the image 2 data in half to assign each half to the validation and test sets respectively. By doing so, we retain the majority of the data for training to better fit our classifiers. In addition, by splitting image 2 in half, we still retain the spatial structure of the data for the validation and test sets. We believe that image 2 is the best choice to split in half for our validation and test sets because each half contains numerous samples from each class. Looking at the maps of the validation and test sets below, we see that each set contains a sizable number of cloud and non-cloud samples. Since we would like to incorporate this image split method with the cross validation function, we will incorporate the validation data which is half of image 2 into the training data and use the validation data along with the training data from images 1 and 3 to train and validate on K folds of data before checking how the trained model will perform on the separate test data from image 2.
 
-```{r val-test-maps}
+```{r val-test-maps, fig.width=8, fig.height = 3}
 split_ims <- image_split(data[,-4], data[,4], K=8)
 
 val_map <- ggplot(data=split_ims$val_data, aes(x=X, y=Y,
@@ -431,13 +431,13 @@ test_trivial <- rep(0, length(test_labels))
 
 ## First Order Importance
 
-```{r corrplot-binary}
+```{r corrplot-binary, fig.width=4, fig.height=4, eval = FALSE}
 corrplot::corrplot(cor(X_cv[, 4:12]), type="upper", tl.col="black")
 ```
 
 In general, the best set of features should include features that are strongly correlated with the response, in this case label, and features that are weakly correlated with each other. Looking at the correlation plot in the exploratory data analysis section, NDAI and CORR are fairly strongly correlated with label and are fairly weakly correlated with each other. Although SD is weakly correlated with CORR which would make it a good feature to include with CORR, it may not be preferable because it is strongly correlated with NDAI and weakly correlated with label. Looking at the scatter plots of the 3 combinations of these 3 variables below, we see that the -1 and 1 labels corresponding to the non-cloud and cloud labels are more easily separated with NDAI and CORR or with log(SD) and CORR. Therefore, we believe that NDAI and CORR are the best 2 features to select out of the 3 constructed physical features because they are both strongly correlated with the response label, are fairly weakly correlated with each other, and lead to more separable groups of labels.
 
-```{r scatter-compare}
+```{r scatter-compare, fig.width=8, fig.height=3}
 scatter1 <- ggplot() +
   geom_point(aes(x=X_cv$NDAI, y=log(X_cv$SD), color=y_cv),
              alpha=0.5) +
@@ -466,7 +466,7 @@ scatter3 = scatter3 +
   theme(legend.position="none")
 
 grid.arrange(scatter1, scatter2, scatter3, bin_leg,
-             nrow=1, ncol=4)
+             nrow=1, ncol=4, widths = c(1,1,1,.5))
 ```
 
 Now looking at the radiance angles, the most promising features include BF, AF, and AN because they are all fairly highly correlated with label. Although the correlation of BF with label is slightly weaker, it has a weaker correlation with CORR which may make it a better feature to combine with NDAI and CORR.
@@ -573,7 +573,7 @@ rf_index <- which.max(cv_rf$roc_obj$specificities + cv_rf$roc_obj$sensitivities)
 gbm_index <- which.max(cv_gbm$roc_obj$specificities + cv_gbm$roc_obj$sensitivities)
 ```
 
-```{r image-ROC-comparison}
+```{r image-ROC-comparison, fig.width=8, fig.height = 3.5}
 ggplot() +
   # lr ROC
   geom_line(aes(x = 1 - cv_lr$roc_obj$specificities,
@@ -721,7 +721,7 @@ rf_b_index <- which.max(cv_rf_b$roc_obj$specificities + cv_rf_b$roc_obj$sensitiv
 gbm_b_index <- which.max(cv_gbm_b$roc_obj$specificities + cv_gbm_b$roc_obj$sensitivities)
 ```
 
-```{r block-ROC-comparison}
+```{r block-ROC-comparison, fig.width=8, fig.height=3.5}
 ggplot() +
   # lr ROC
   geom_line(aes(x = 1 - cv_lr_b$roc_obj$specificities,
@@ -844,7 +844,7 @@ colnames(n_df) = c("ntrees", "lr", "folds", "block", "image")
 write_csv(n_df, "parameter_estimation.csv")
 ```
 
-```{r param_estim_plot}
+```{r param_estim_plot, fig.width=8, fig.height=3.5}
 n_df = read_csv("parameter_estimation.csv")
 
 ng1 = n_df %>%
@@ -883,7 +883,7 @@ grid.arrange(ng1,ng2, ng_leg ,nrow=1, widths = c(1,1,.5))
 ```
 In total, 250 pairings of the two hyperparameters were trained on both split methods, with 25 distinct values for the number of trees and 10 distinct learning rate choices. In the block split method, at higher numbers of trees, the best performing learning rate is 0.01 with around 275 trees. For image split, higher trees meant significantly better performance with the 0.01 learning rate, compared to the other learning rates. However, the best parameter pair, for both split methods, by average cross-validated loss was 50 trees with learning rate of 0.075.
 
-```{r best-gbm-training, message=FALSE}
+```{r best-gbm-training, message=FALSE, fig.width=8, fig.height=3.5}
 gbm_best = CVmaster(X_cv[, -c(4, 6, 8, 9, 11, 12)], y_cv, "gbm",
                     K = 8, split = "image", type = "response",
                     distribution = "adaboost", bag.fraction = 1, n.trees = 50,
@@ -939,17 +939,11 @@ cmI = confusionMatrix(as.factor(gbm_best$test_preds),
 cmB = confusionMatrix(as.factor(gbm_best_b$test_preds), 
                 reference = gbm_best_b$test_labels)
 
-cmI$table %>%
-  kable(digits=3,
-        caption="Image Split Confusion Matrix") %>%
-  kable_styling(full_width=F,
-                position = "float_left")
+kable(cmI$table, caption = "Image Split") %>%
+  kable_styling(full_width = F, latex_options = "HOLD_position")
 
-cmB$table %>%
-  kable(digits=3,
-        caption="Block Split Confusion Matrix") %>%
-  kable_styling(full_width=F,
-                position = "float_left")
+kable(cmB$table, caption = "Block Split") %>%
+  kable_styling(full_width = F, latex_options = "HOLD_position")
 ```
 
 ## Comparing Misclassification Errors
@@ -1085,7 +1079,7 @@ for (f in 18:20) {
 ```
 
 ```{r features-errors}
-grid.arrange(g1, g3, g6, nrow = 1)
+#grid.arrange(g1, g3, g6, nrow = 1)
 i_features_errors[[1]]
 b_features_errors[[1]]
 i_features_errors[[2]]
@@ -1209,15 +1203,20 @@ for (i in c(1, 3)) {
 }
 ```
 
-```{r image-maps-all}
-grid.arrange(blank, leg_response, leg_confusion,
+```{r image-maps-all, fig.height=5, fig.width = 8.5}
+obj1 = arrangeGrob(blank, leg_response, leg_confusion,
              nrow = 1, ncol = 3)
-grid.arrange(i_maps_folds[[1]], i_maps_response[[1]], i_maps_confusion[[1]],
+obj2 = arrangeGrob(i_maps_folds[[1]], i_maps_response[[1]], i_maps_confusion[[1]],
              nrow = 1, ncol = 3)
-grid.arrange(i_maps_folds[[2]], i_maps_response[[2]], i_maps_confusion[[2]],
+obj3 = arrangeGrob(i_maps_folds[[2]], i_maps_response[[2]], i_maps_confusion[[2]],
              nrow = 1, ncol = 3)
-grid.arrange(i_maps_folds[[3]], i_maps_response[[3]], i_maps_confusion[[3]],
+obj4 = arrangeGrob(i_maps_folds[[3]], i_maps_response[[3]], i_maps_confusion[[3]],
              nrow = 1, ncol = 3)
+
+obj5 = arrangeGrob(obj2, obj4, ncol = 2, widths = c(0.5, 0.5))
+obj6 = arrangeGrob(obj3, obj1, ncol = 2, widths = c(0.6, 0.4))
+
+grid.arrange(obj5, obj6, ncol = 1, nrow = 2)
 ```
 
 The maps above correspond to the 3 images that are split using the image split method. Each row of maps represents one of the 3 images. The left most map of each row visualizes the points that are assigned to each fold from the image split method. In image 2, the left half is assigned to the test set as mentioned before while the right half is split into folds 4 and 5. The middle map of each row visualizes the probability of each point being a cloud label based on the cross validation response predictions for each fold or the test response predictions. Let us refer to the middle maps as the probability maps. The right most map of each row visualizes whether each point is a true positive, true negative, false positive, or false negative. Let us refer to the right most maps as the confusion matrix maps.
