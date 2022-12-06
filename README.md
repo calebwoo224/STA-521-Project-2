@@ -12,8 +12,7 @@ This directory contains all the necessary files for recreating our 2nd project, 
     -   `block_split.R`: This function takes in training data and labels and splits each image into $k \times k$ blocks, which can then be shuffled for crossvalidation and separated into train, validation, and test subsets.
     -   `image_split.R`: This function takes in training data and labels and splits the dataset into $k$ total blocks, and returns the training, validation, and test subsets of the dataset separately.
     -   `CVmaster.R`: This function takes in training data, training labels, a generic classifier name, a number of folds $K$, and a split type, and returns the k-fold cross-validation error, average cross-validation error, and test error for the trained classifier on the data split using one of the above split functions. Other arguments include a probability threshold for binary classification, a random seed for reproducibility, a prediction type argument, a formula argument (to allow for some classifiers that do not take formulas), a loss function (only misclassification error is used), and other arguments that can be passed forward into the classifier for parameter tuning or optimization. The function also returns a ROC object on the test data, the predictions on each cross-validated fold and on the test set, and the true labels for the test set.
-4.  `references.bib`: The list of references for this project (in this case, only the article).
-5.  `yu2008.pdf`: The source article for the project.
+4.  `references.bib`: The list of references for this project (in this case, only the source article).
 
 To reproduce the paper from scratch:
 
