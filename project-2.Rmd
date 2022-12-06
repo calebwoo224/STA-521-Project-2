@@ -91,6 +91,7 @@ map1 <- ggplot(data=image1, aes(x=X, y=Y, color=factor(Label))) +
   scale_color_manual(labels = c("Not Cloud", "Unlabeled", "Cloud"),
                      values = c("chocolate3", "darkseagreen", "deepskyblue"),
                      name = "Label") +
+  theme_void() +
   theme(legend.position = "none")
 map2 <- ggplot(data=image2, aes(x=X, y=Y, color=factor(Label))) +
   geom_point() +
@@ -99,6 +100,7 @@ map2 <- ggplot(data=image2, aes(x=X, y=Y, color=factor(Label))) +
   scale_color_manual(labels = c("Not Cloud", "Unlabeled", "Cloud"),
                      values = c("chocolate3", "darkseagreen", "deepskyblue"),
                      name = "Label") +
+  theme_void() +
   theme(legend.position = "none")
 map3 <- ggplot(data=image3, aes(x=X, y=Y, color=factor(Label))) +
   geom_point() +
@@ -106,7 +108,8 @@ map3 <- ggplot(data=image3, aes(x=X, y=Y, color=factor(Label))) +
   labs(title = "Image 3") +
   scale_color_manual(labels = c("Not Cloud", "Unlabeled", "Cloud"),
                      values = c("chocolate3", "darkseagreen", "deepskyblue"),
-                     name = "Label")
+                     name = "Label") +
+  theme_void()
 
 leg = ggpubr::get_legend(map3)
 
@@ -321,6 +324,7 @@ val_map <- ggplot(data=split_ims$val_data, aes(x=X, y=Y,
   scale_color_manual(labels = c("Not Cloud", "Unlabeled", "Cloud"),
                      values = c("chocolate3", "darkseagreen", "deepskyblue"),
                      name = "Label") +
+  theme_void() +
   theme(legend.position = "none")
 test_map <- ggplot(data=split_ims$test_data, aes(x=X, y=Y,
                                             color=factor(split_ims$test_labels))) +
@@ -330,6 +334,7 @@ test_map <- ggplot(data=split_ims$test_data, aes(x=X, y=Y,
   scale_color_manual(labels = c("Not Cloud", "Unlabeled", "Cloud"),
                      values = c("chocolate3", "darkseagreen", "deepskyblue"),
                      name = "Label") +
+  theme_void() +
   theme(legend.position = "none")
 grid.arrange(test_map, val_map, leg, nrow=1)
 ```
@@ -1030,10 +1035,80 @@ b_cv <- b_cv %>%
     (Label == 0 & preds == 0) ~ "TN",
     (Label == 1 & preds == 0) ~ "FN"
   ))
+```
 
-b_cv$`NDAI Range` <- cut(b_cv$NDAI, breaks = 5)
-b_cv$`CORR Range` <- cut(b_cv$CORR, breaks = 5)
-b_cv$`BF Range` <- cut(b_cv$BF, breaks = 5)
+```{r feature-bins}
+feat_bins <- list()
+for (i in c(5, 7, 10)) {
+  #print(colnames(isplit_labeled)[i])
+  #print(colnames(b_cv)[i])
+  name <- colnames(isplit_labeled)[i]
+  feat_bins[[name]] <- seq(from = min(min(isplit_labeled[, i]), min(b_cv[, i])),
+                           to = max(max(isplit_labeled[, i]), max(b_cv[, i])),
+                           length.out = 6)
+}
+
+isplit_labeled$`NDAI Range` <- rep("empty", nrow(isplit_labeled))
+b_cv$`NDAI Range` <- rep("empty", nrow(b_cv))
+isplit_labeled$`CORR Range` <- rep("empty", nrow(isplit_labeled))
+b_cv$`CORR Range` <- rep("empty", nrow(b_cv))
+isplit_labeled$`BF Range` <- rep("empty", nrow(isplit_labeled))
+b_cv$`BF Range` <- rep("empty", nrow(b_cv))
+
+feats <- c(5, 7, 10)
+ranges <- 18:20
+for(i in 1:3) {
+  for(b in 1:5) {
+    rows_im <- isplit_labeled %>%
+      filter_at(feats[i],
+                all_vars((. >= feat_bins[[i]][b]) & (. <= feat_bins[[i]][b+1]))) %>%
+      pull(index)
+    isplit_labeled[rows_im, ] <- isplit_labeled %>%
+      filter_at(feats[i],
+                all_vars((. >= feat_bins[[i]][b]) & (. <= feat_bins[[i]][b+1]))) %>%
+      mutate_at(.vars = ranges[i],
+                .funs = list(~ rep(paste0("[", signif(feat_bins[[i]][b], 3), ", ",
+                                          signif(feat_bins[[i]][b+1], 3), "]"),
+                                   length(rows_im))))
+    
+    rows_b <- b_cv %>%
+      filter_at(feats[i],
+                all_vars((. >= feat_bins[[i]][b]) & (. <= feat_bins[[i]][b+1]))) %>%
+      pull(index)
+    b_cv[rows_b, ] <- b_cv %>%
+      filter_at(feats[i],
+                all_vars((. >= feat_bins[[i]][b]) & (. <= feat_bins[[i]][b+1]))) %>%
+      mutate_at(.vars = ranges[i],
+                .funs = list(~ rep(paste0("[", signif(feat_bins[[i]][b], 3), ", ",
+                                          signif(feat_bins[[i]][b+1], 3), "]"),
+                                   length(rows_b))))
+  }
+}
+
+for(r in ranges) {
+  isplit_labeled[, r] <- as.factor(isplit_labeled[, r])
+  b_cv[, r] <- as.factor(b_cv[, r])
+}
+```
+
+```{r features-errors-tables}
+i_features_errors <- list()
+for (f in 18:20) {
+  i_features_errors[[f-17]] <- isplit_labeled %>%
+    filter(block != 0) %>%
+    group_by_at(f) %>%
+    summarise(Misclassification = sum(Label != preds)/n(),
+              P = sum(Label == 1),
+              FNR = sum(confusion == "FN")/sum(Label == 1),
+              N = sum(Label == 0),
+              FPR = sum(confusion == "FP")/sum(Label == 0)) %>%
+    kable(digits = 3,
+          caption = paste0("Image Split ",
+                           colnames(isplit_labeled)[f],
+                           " Errors")) %>%
+    kable_styling(latex_options = "HOLD_position",
+                  full_width = F)
+}
 
 b_features_errors <- list()
 for (f in 18:20) {
@@ -1053,30 +1128,7 @@ for (f in 18:20) {
 }
 ```
 
-```{r image-features-errors}
-isplit_labeled$`NDAI Range` <- cut(isplit_labeled$NDAI, breaks = 5)
-isplit_labeled$`CORR Range` <- cut(isplit_labeled$CORR, breaks = 5)
-isplit_labeled$`BF Range` <- cut(isplit_labeled$BF, breaks = 5)
-i_features_errors <- list()
-for (f in 18:20) {
-  i_features_errors[[f-17]] <- isplit_labeled %>%
-    filter(block != 0) %>%
-    group_by_at(f) %>%
-    summarise(Misclassification = sum(Label != preds)/n(),
-              P = sum(Label == 1),
-              FNR = sum(confusion == "FN")/sum(Label == 1),
-              N = sum(Label == 0),
-              FPR = sum(confusion == "FP")/sum(Label == 0)) %>%
-    kable(digits = 3,
-          caption = paste0("Image Split ",
-                           colnames(isplit_labeled)[f],
-                           " Errors")) %>%
-    kable_styling(latex_options = "HOLD_position",
-                  full_width = F)
-}
-```
-
-```{r features-errors}
+```{r features-errors-output}
 #grid.arrange(g1, g3, g6, nrow = 1)
 i_features_errors[[1]]
 b_features_errors[[1]]
