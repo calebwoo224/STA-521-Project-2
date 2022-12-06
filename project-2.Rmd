@@ -851,7 +851,7 @@ ng1 = n_df %>%
   geom_line(data = . %>% filter (folds == "A"), aes(x = ntrees, y = block, 
                                                     group = lr,
                                                     color = lr),
-            linewidth = 1) +
+            linewidth = .7) +
   labs(title = "Block Split",
        x = "Number of Trees Fit",
        y = "Misclassification Error",
@@ -865,7 +865,7 @@ ng2 = n_df %>%
   geom_line(data = . %>% filter (folds == "A"), aes(x = ntrees, y = image,
                                                     group = lr,
                                                     color = lr),
-            linewidth = 1) +
+            linewidth = .7) +
   labs(title = "Image Split", 
        x = "Number of Trees Fit",
        y = element_blank(),
@@ -1223,7 +1223,8 @@ Based on the probability and confusion matrix maps, we immediately observe that 
 
 ## Finding a Better Classifier
 
-Looking at the results from part 4(a), AdaBoost appears to be one of the stronger classifiers for predicting cloudless pixels, but a better classifier would have a negative predictive value closer to the positive predictive value of the model (for the image split the NPV was $19\%$ lower, and for the block split the NPV was $8\%$ lower). A better classifier, either similar to AdaBoost with a different loss function, such as "huberized loss", might be more effective at handling this. Conversely, a classifier like soft-margin SVM might be a better classifier on this dataset, given it might be more robust to predicting future data correctly and predicting unlabeled points in the current dataset, but training SVM was computationally prohibitive for this analysis.
+Looking at the results from part 4(a), AdaBoost appears to be one of the stronger classifiers for predicting cloudless pixels, but a better classifier would have a negative predictive value closer to the positive predictive value of the model (for the image split the NPV was $19\%$ lower, and for the block split the NPV was $8\%$ lower). A better classifier, either similar to AdaBoost with a different loss function, such as "huberized loss", might be more effective at handling this. Looking at part 4(b), there are clusters of false positives and false negatives, but also there are clusters that have mixed positive/negative labels. A better classifier would recognize these clusters. Conversely, a classifier like soft-margin SVM might be a better classifier on this dataset, given it might be more robust to predicting future data correctly and predicting unlabeled points in the current dataset, but training SVM was computationally prohibitive for this analysis. 
+Given these patterns, one better classifier would be to run a two-stage classifier. The first stage would be any classifier, such as the AdaBoost classifier above. The second classifier, then, would consider the assigned classes from the first classifier, as well as the confidence in those classes (the predicted probabilities), and would use heuristics to reclassify points based on their features as well as the classes of adjacent points. For example, a point which had a 70% probability of being cloudless, but which is surrounded by points that are 90% probability of having clouds, would be reclassified to be considered cloudy. If effective, this classifier would at least remove the instances of isolated False Positives and False Negatives, and though it would not help the large clusters of mislabeled points, if used in conjunction with a stronger boosting classifier, or one with a different loss function, would potentially result in a better overall classifier.
 
 ## Comparing Split Methods
 
