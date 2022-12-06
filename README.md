@@ -25,4 +25,4 @@ To reproduce the paper from scratch:
 
 4.  Go through and set the desired seed in all of the "set.seed" functions as well as an argument in every CVmaster function (the default is 521, which was the seed we used to produce the paper).
 
-5.  Run the code chunks! This will take about 20 minutes without the parameter grid estimation or 10-11 hours with the parameter grid estimation (which is why it does not evaluate by default).
+5.  Knit the file! This will take about 20 minutes without the parameter grid estimation or 10-11 hours with the parameter grid estimation (which is why it does not evaluate by default). All of the code to recreate the PDF is within the Rmd file or one of the three functions called (either in the package or sourced from the R files), so knitting the document will produce a single self-contained PDF.
