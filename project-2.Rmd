@@ -120,10 +120,31 @@ Similar to the ELCM-QDA results from the paper, we observe many ambiguous and un
 
 ## Exploratory Data Analysis
 
-We now continue with a short exploration of the data itself. First, we look at the pairwise correlations between the features, excluding the coordinates:
+We now continue with a short exploration of the data itself. First, we look at the pairwise correlations between the features, excluding the coordinates (and dropping unlabeled points):
+
+```{r binary-data-all}
+X_cv <- data %>%
+  filter(Label != 0) %>%
+  mutate(Label = ifelse(
+    Label == -1,
+    0, Label
+  ))
+y_cv <- X_cv %>% pull(Label)
+y_cv <- as.factor(y_cv)
+
+#binary_pct <- X_cv %>%
+#              count(Label) %>%
+#              summarise(pct = 100*n/nrow(X_cv))
+#rownames(binary_pct) <- c("Not Cloud", "Cloud")
+#colnames(binary_pct) <- c("% of pixels")
+#binary_pct %>%
+#  kable(digits = 3,
+#        caption = "Cloud vs Not Cloud Binary Percentages") %>%
+#  kable_styling(latex_options = "HOLD_position", full_width = F)
+```
 
 ```{r corrplot, fig.width = 4, fig.height = 4}
-corrplot::corrplot(cor(data[,4:12]), type="upper", tl.col="black")
+corrplot::corrplot(cor(X_cv[, 4:12]), type="upper", tl.col="black")
 ```
 
 From these correlations, some trends stand out. All three of the "physical features" in the paper (NDAI, SD, CORR), are positively correlated with label, which indicates that *higher* values of all three of these features are associated with a label of +1, meaning cloud cover. In contrast, however, four of the five given radiance angles show negative correlation with the label variable, indicating that *lower* values of radiance are generally associated with cloud cover. We can also compare differences between the features in the two classes by considering the densities of the features separated by label:
@@ -319,26 +340,6 @@ Before splitting the data, we first remove all observations with 0 labels which 
 
 We can now split the data using the methods outlined above and run a "classifier" which just sets all points to label $-1$, indicating cloudlessness. For the block splitting method, we split each image into 64 blocks, for a total of 192 blocks, of which 30 are for testing, 30 are for validation, and 132 are for training. This method gives a validation set misclassification rate of $40.6\%$ and a test set misclassification rate of $43.2\%$, which is about in line with the overall rate of $-1$ labels being $59.4\%$ and $56.8\%$ respectively. This classifier would yield high accuracy if the image data was unbalanced to be mostly cloudless images, but in a scenario where a slight majority of points are labeled $-1$, it is not a particularly accurate classifier.
 
-```{r binary-data-all}
-X_cv <- data %>%
-  filter(Label != 0) %>%
-  mutate(Label = ifelse(
-    Label == -1,
-    0, Label
-  ))
-y_cv <- X_cv %>% pull(Label)
-y_cv <- as.factor(y_cv)
-
-#binary_pct <- X_cv %>%
-#              count(Label) %>%
-#              summarise(pct = 100*n/nrow(X_cv))
-#rownames(binary_pct) <- c("Not Cloud", "Cloud")
-#colnames(binary_pct) <- c("% of pixels")
-#binary_pct %>%
-#  kable(digits = 3,
-#        caption = "Cloud vs Not Cloud Binary Percentages") %>%
-#  kable_styling(latex_options = "HOLD_position", full_width = F)
-```
 
 ```{r block-split-baseline}
 set.seed(521)
@@ -430,10 +431,6 @@ test_trivial <- rep(0, length(test_labels))
 ```
 
 ## First Order Importance
-
-```{r corrplot-binary, fig.width=4, fig.height=4, eval = FALSE}
-corrplot::corrplot(cor(X_cv[, 4:12]), type="upper", tl.col="black")
-```
 
 In general, the best set of features should include features that are strongly correlated with the response, in this case label, and features that are weakly correlated with each other. Looking at the correlation plot in the exploratory data analysis section, NDAI and CORR are fairly strongly correlated with label and are fairly weakly correlated with each other. Although SD is weakly correlated with CORR which would make it a good feature to include with CORR, it may not be preferable because it is strongly correlated with NDAI and weakly correlated with label. Looking at the scatter plots of the 3 combinations of these 3 variables below, we see that the -1 and 1 labels corresponding to the non-cloud and cloud labels are more easily separated with NDAI and CORR or with log(SD) and CORR. Therefore, we believe that NDAI and CORR are the best 2 features to select out of the 3 constructed physical features because they are both strongly correlated with the response label, are fairly weakly correlated with each other, and lead to more separable groups of labels.
 
@@ -930,7 +927,6 @@ ggplot() +
                                 "orange")
   )
 ```
-Looking at the ROC curve, we can choose a cutoff such that the sum of the specificity and sensitivity is maximized, since the goal is to have a model that has both maximum sensitivity and maximum specificity. We can also determine the best threshold for that cutoff, which for the image split method is a threshold of $\alpha_i \approx 0.59479$ and for the block split method is $\alpha_b \approx 0.23699$. With these thresholds, we can also calculate confusion matrices on the test sets for each split method. Looking at the confusion matrix, the image split method returns a test set predictive accuracy of $\approx 86.9\%$, with a sensitivity of $\approx 82.7\%$ and a specificity of $94.4 \%$. Most significantly, the positive predictive value of the model, with cloudlessness as the positive class, is $0.9624$, meaning that $96.24 \%$ of the cloudless points are predicted cloudless are actually cloudless. This suggests that the model is strong in that, if it predicts a pixel to be cloudless, it is very likely to actually be cloudless. In contrast, for the block split method, the test set predictive accuracy is $\approx 74.2 \%$, with a sensitivity of $76.2 \%$ and a specificity of $71.6\%$. Although weaker across the board than the image split model, the positive predictive value of the block split model is still $0.7796$, and the model is still stronger in predicting cloudlessness than in predicting the existence of clouds.
 
 ```{r}
 cmI = confusionMatrix(as.factor(gbm_best$test_preds), 
@@ -945,6 +941,8 @@ kable(cmI$table, caption = "Image Split") %>%
 kable(cmB$table, caption = "Block Split") %>%
   kable_styling(full_width = F, latex_options = "HOLD_position")
 ```
+
+Looking at the ROC curve, we can choose a cutoff such that the sum of the specificity and sensitivity is maximized, since the goal is to have a model that has both maximum sensitivity and maximum specificity. We can also determine the best threshold for that cutoff, which for the image split method is a threshold of $\alpha_i \approx 0.59479$ and for the block split method is $\alpha_b \approx 0.23699$. With these thresholds, we can also calculate confusion matrices on the test sets for each split method. Looking at the confusion matrix, the image split method returns a test set predictive accuracy of $\approx 86.9\%$, with a sensitivity of $\approx 82.7\%$ and a specificity of $94.4 \%$. Most significantly, the positive predictive value of the model, with cloudlessness as the positive class, is $0.9624$, meaning that $96.24 \%$ of the cloudless points are predicted cloudless are actually cloudless. This suggests that the model is strong in that, if it predicts a pixel to be cloudless, it is very likely to actually be cloudless. In contrast, for the block split method, the test set predictive accuracy is $\approx 74.2 \%$, with a sensitivity of $76.2 \%$ and a specificity of $71.6\%$. Although weaker across the board than the image split model, the positive predictive value of the block split model is still $0.7796$, and the model is still stronger in predicting cloudlessness than in predicting the existence of clouds.
 
 ## Comparing Misclassification Errors
 
